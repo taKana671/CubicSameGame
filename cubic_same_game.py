@@ -1,9 +1,11 @@
+import random
 import sys
+from enum import Enum
 
 from direct.showbase.InputStateGlobal import inputState
 from direct.showbase.ShowBaseGlobal import globalClock
 from direct.showbase.ShowBase import ShowBase
-from panda3d.core import NodePath, PandaNode, Quat, Vec3
+from panda3d.core import NodePath, PandaNode, Quat, Vec3, LColor
 
 from window import Window
 from sphere import Sphere
@@ -14,6 +16,22 @@ TURN_UP = 'TurnUp'
 TURN_DOWN = 'TurnDown'
 TURN_RIGHT = 'TurnRight'
 TURN_LEFT = 'TurnLeft'
+
+
+class Color(Enum):
+
+    RED = LColor(1, 0, 0, 1)
+    BLUE = LColor(0, 1, 0, 1)
+    YELLOW = LColor(1, 1, 0, 1)
+    GREEN = LColor(0, 0.5, 0, 1)
+    ORANGE = LColor(1, 0.549, 0, 1)
+    MAGENTA = LColor(1, 0, 1, 1)
+    PURPLE = LColor(0.501, 0, 0.501, 1)
+    LIME = LColor(0, 1, 0, 1)
+
+    @classmethod
+    def select(cls, n):
+        return random.sample(list(map(lambda c: c.value, cls)), n)
 
 
 class Game(ShowBase):
@@ -33,24 +51,14 @@ class Game(ShowBase):
         self.directional_light = BasicDayLight()
 
         self.create_key_controls()
+
+        self.base_point = Vec3(0, 0, 0)
+        self.colors = Color.select(4)
+        self.spheres = [[[None for _ in range(4)] for _ in range(4)] for _ in range(4)]
+        self.pos = [-3, -1, 1, 3]
+        self.create_spheres()
+
         self.taskMgr.add(self.update, 'update')
-
-        self.spheres = [s for s in self.create_spheres()]
-
-        # self.root = self.render.attachNewNode('Spheres')
-
-        # sphere1 = Sphere()
-        # sphere1.setPos(-5, 0, 0)
-        # sphere2 = Sphere()
-        # sphere2.setPos(-3, 0, 0)
-        # sphere3 = Sphere()
-        # sphere3.setPos(-5, 0, -2)
-
-        # self.spheres = [sphere1, sphere2, sphere3]
-
-        # sphere.setScale(0.2)
-        # sphere.setColor(RED)
-        # sphere.setPos(-5, 0, 0)
 
     def create_key_controls(self):
         self.accept("escape", sys.exit)
@@ -60,39 +68,39 @@ class Game(ShowBase):
         inputState.watchWithModifiers(TURN_RIGHT, 'arrow_right')
 
     def create_spheres(self):
-        for x in [-5, -2.5, 0, 2.5]:
-            for y in [-5, -2.5, 0, 2.5]:
-                for z in [-5, -2.5, 0, 2.5]:
-                    sphere = Sphere()
-                    sphere.setPos(x, y, z)
-                    yield sphere
+        for x in range(4):
+            for y in range(4):
+                for z in range(4):
+                    idx = random.randint(0, 3)
+                    pos = Vec3(self.pos[x], self.pos[y], self.pos[z])
+                    sphere = Sphere(self.colors[idx], pos)
+                    self.spheres[x][y][z] = sphere
 
     def update(self, task):
         dt = globalClock.getDt()
         velocity = 0
-        point = Vec3(0, 0, 0)
         axis = Vec3.forward()
 
         if inputState.isSet(TURN_UP):
             velocity += 10
-        if inputState.isSet(TURN_DOWN):
+        elif inputState.isSet(TURN_DOWN):
             velocity -= 10
-        if inputState.isSet(TURN_LEFT):
+        elif inputState.isSet(TURN_LEFT):
             velocity += 10
             axis = Vec3.up()
-        if inputState.isSet(TURN_RIGHT):
+        elif inputState.isSet(TURN_RIGHT):
             velocity -= 10
             axis = Vec3.up()
 
-        # axis = Vec3.up()
-        # print(velocity)
         rotation_angle = velocity * dt
 
-        for s in self.spheres:
-            s.rotate_around(rotation_angle, axis, point)
+        for x in range(4):
+            for y in range(4):
+                for z in range(4):
+                    if sphere := self.spheres[x][y][z]:
+                        sphere.rotate_around(rotation_angle, axis, self.base_point)
 
         return task.cont
-
 
 
 game = Game()
