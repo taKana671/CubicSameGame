@@ -1,4 +1,5 @@
 # CubicSameGame
+Now under construction
 
 # Requirements
 * Python 3.9
