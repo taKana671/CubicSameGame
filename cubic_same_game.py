@@ -40,27 +40,39 @@ class Color(Enum):
 
 class Sphere:
 
-    def __init__(self, node_path, tag, color, pos):
+    def __init__(self, node_path, point, tag, color, pos):
         """color: LColor
            pos: Vec3
         """
+        self.color = color
+        self.model_pos = pos
+        self.point = point
+
         self.model = base.loader.loadModel(PATH_SPHERE)
         self.model.reparentTo(node_path)
         self.model.setScale(0.2)
-        self.model.setColor(color)
-        self.model.setPos(pos)
+        self.model.setColor(self.color)
+        self.model.setPos(self.model_pos)
 
         self.model.find('**/Sphere').node().setIntoCollideMask(BitMask32.bit(1))
         self.model.find('**/Sphere').node().setTag('sphere', str(tag))
-        # render/squareRoot/square.egg/polygon
+        # render/sphereRoot/sphere.egg/Sphere
 
-    def rotate_around(self, angle, axis, point):
-        object_pos = self.model.getPos()
+    def rotate_around(self, angle, axis):
         q = Quat()
         q.setFromAxisAngle(angle, axis.normalized())
-        r = q.xform(object_pos - point)
-        rotated_pos = point + r
-        self.model.setPos(rotated_pos)
+        r = q.xform(self.model_pos - self.point)
+        self.model_pos = self.point + r
+
+        if self.model:
+            self.model.setPos(self.model_pos)
+
+        # object_pos = self.model.getPos()
+        # q = Quat()
+        # q.setFromAxisAngle(angle, axis.normalized())
+        # r = q.xform(object_pos - point)
+        # rotated_pos = point + r
+        # self.model.setPos(rotated_pos)
 
 
 class Game(ShowBase):
@@ -78,12 +90,9 @@ class Game(ShowBase):
         self.setup_controls()
         self.setup_collision_detection()
 
-        self.base_point = Vec3(0, 0, 0)
         self.colors = Color.select(4)
-        self.spheres = [[[None for _ in range(4)] for _ in range(4)] for _ in range(4)]
-        self.pos = [-3, -1, 1, 3]
-        self.setup_spheres()
-
+        self.sphere_root = self.render.attachNewNode('sphereRoot')
+        self.spheres = [sphere for sphere in self.setup_spheres()]
         self.taskMgr.add(self.update, 'update')
 
     def setup_collision_detection(self):
@@ -106,17 +115,18 @@ class Game(ShowBase):
         inputState.watchWithModifiers(TURN_RIGHT, 'arrow_right')
 
     def setup_spheres(self):
-        self.sphere_root = self.render.attachNewNode('sphereRoot')
-        i = 0
+        pts = [-3, -1, 1, 3]
+        point = Vec3(0, 0, 0)
 
-        for x in range(4):
-            for y in range(4):
-                for z in range(4):
-                    idx = random.randint(0, 3)
-                    pos = Vec3(self.pos[x], self.pos[y], self.pos[z])
-                    sphere = Sphere(self.sphere_root, i, self.colors[idx], pos)
-                    self.spheres[x][y][z] = sphere
-                    i += 1
+        for i in range(64):
+            x = i // 16
+            y = (i // 4) % 4
+            z = i % 4
+            idx = random.randint(0, 3)
+            pos = Vec3(pts[x], pts[y], pts[z])
+            sphere = Sphere(
+                self.sphere_root, point, i, self.colors[idx], pos)
+            yield sphere
 
     def click(self):
         if self.mouseWatcherNode.hasMouse():
@@ -146,13 +156,10 @@ class Game(ShowBase):
             velocity -= 10
             axis = Vec3.up()
 
-        rotation_angle = velocity * dt
-
-        for x in range(4):
-            for y in range(4):
-                for z in range(4):
-                    if sphere := self.spheres[x][y][z]:
-                        sphere.rotate_around(rotation_angle, axis, self.base_point)
+        if rotation_angle := velocity * dt:
+            for i in range(64):
+                sphere = self.spheres[i]
+                sphere.rotate_around(rotation_angle, axis)
 
         return task.cont
 
