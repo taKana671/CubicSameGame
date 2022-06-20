@@ -2,6 +2,10 @@ import random
 import sys
 from enum import Enum
 
+from direct.particles.ParticleEffect import ParticleEffect
+
+
+from direct.interval.IntervalGlobal import Sequence, ParticleInterval, Func, Wait
 from direct.showbase.InputStateGlobal import inputState
 from direct.showbase.ShowBaseGlobal import globalClock
 from direct.showbase.ShowBase import ShowBase
@@ -14,6 +18,7 @@ from lights import BasicAmbientLight, BasicDayLight
 
 
 PATH_SPHERE = 'models/alice-shapes--sphere/sphere'
+PATH_PARTICLES = 'disappear.ptf'
 
 
 TURN_UP = 'TurnUp'
@@ -48,6 +53,8 @@ class Sphere:
         self.model_pos = pos
         self.point = point
 
+        self.node_path = node_path
+
         self.model = base.loader.loadModel(PATH_SPHERE)
         self.model.reparentTo(node_path)
         self.model.setScale(0.2)
@@ -74,6 +81,15 @@ class Sphere:
         # rotated_pos = point + r
         # self.model.setPos(rotated_pos)
 
+    def swing(self):
+        Sequence(
+            self.model.posInterval(0.1, self.model_pos + (0, 0, 0.2)),
+            self.model.posInterval(0.1, self.model_pos - (0, 0, 0.2)),
+            self.model.posInterval(0.1, self.model_pos),
+            # self.model.scaleInterval(0.3, 0.01),
+            Wait(0.5),
+        ).start()
+
 
 class Game(ShowBase):
 
@@ -92,7 +108,8 @@ class Game(ShowBase):
 
         self.colors = Color.select(4)
         self.sphere_root = self.render.attachNewNode('sphereRoot')
-        self.spheres = [sphere for sphere in self.setup_spheres()]
+        self.spheres = [[[None for _ in range(4)] for _ in range(4)] for _ in range(4)]
+        self.setup_spheres()
         self.taskMgr.add(self.update, 'update')
 
     def setup_collision_detection(self):
@@ -119,14 +136,20 @@ class Game(ShowBase):
         point = Vec3(0, 0, 0)
 
         for i in range(64):
-            x = i // 16
-            y = (i // 4) % 4
-            z = i % 4
+            x, y, z = self.get_components(i)
             idx = random.randint(0, 3)
             pos = Vec3(pts[x], pts[y], pts[z])
             sphere = Sphere(
                 self.sphere_root, point, i, self.colors[idx], pos)
-            yield sphere
+            self.spheres[x][y][z] = sphere
+
+        print(self.spheres)
+
+    def get_components(self, i):
+        x = i // 16
+        y = (i // 4) % 4
+        z = i % 4
+        return x, y, z
 
     def click(self):
         if self.mouseWatcherNode.hasMouse():
@@ -137,8 +160,10 @@ class Game(ShowBase):
             # import pdb; pdb.set_trace()
             if self.handler.getNumEntries() > 0:
                 self.handler.sortEntries()
-                idx = int(self.handler.getEntry(0).getIntoNode().getTag('sphere'))
-                print(idx)
+                i = int(self.handler.getEntry(0).getIntoNode().getTag('sphere'))
+                print(i)
+                # print([s.getIntoNode().getTag('sphere') for s in self.handler.getEntries()])
+                self.spheres[i].swing()
 
     def update(self, task):
         dt = globalClock.getDt()
@@ -162,6 +187,14 @@ class Game(ShowBase):
                 sphere.rotate_around(rotation_angle, axis)
 
         return task.cont
+
+    def check_colors(self, i):
+        # x * 16 + y * 4 + z
+        x, y, z = self.get_components(i)
+        
+
+
+        
 
 
 game = Game()
