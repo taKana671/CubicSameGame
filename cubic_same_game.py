@@ -20,14 +20,21 @@ from lights import BasicAmbientLight, BasicDayLight
 PATH_SPHERE = 'models/alice-shapes--sphere/sphere'
 PATH_PARTICLES = 'disappear.ptf'
 
+SIZE = 4
+
 
 TURN_UP = 'TurnUp'
 TURN_DOWN = 'TurnDown'
 TURN_RIGHT = 'TurnRight'
 TURN_LEFT = 'TurnLeft'
 
+# TURN_UP = 'TURN_UP'
+# TURN_DOWN = 'TURN_DOWN'
+# TURN_RIGHT = 'TURN_RIGHT'
+# TURN_LEFT = 'TURN_LEFT'
 
-class Color(Enum):
+
+class Colors(Enum):
 
     RED = LColor(1, 0, 0, 1)
     BLUE = LColor(0, 1, 0, 1)
@@ -40,7 +47,7 @@ class Color(Enum):
 
     @classmethod
     def select(cls, n):
-        return random.sample(list(map(lambda c: c.value, cls)), n)
+        return random.sample([m.value for m in cls], n)
 
 
 class Sphere:
@@ -52,8 +59,6 @@ class Sphere:
         self.color = color
         self.model_pos = pos
         self.point = point
-
-        self.node_path = node_path
 
         self.model = base.loader.loadModel(PATH_SPHERE)
         self.model.reparentTo(node_path)
@@ -80,14 +85,25 @@ class Sphere:
         # r = q.xform(object_pos - point)
         # rotated_pos = point + r
         # self.model.setPos(rotated_pos)
-
-    def swing(self):
+    
+    def shake(self):
         Sequence(
             self.model.posInterval(0.1, self.model_pos + (0, 0, 0.2)),
             self.model.posInterval(0.1, self.model_pos - (0, 0, 0.2)),
             self.model.posInterval(0.1, self.model_pos),
-            # self.model.scaleInterval(0.3, 0.01),
+        ).start()
+
+    def _delete(self):
+        self.model.removeNode()
+        self.model = None
+        self.color = None
+
+    def disappear(self):
+        Sequence(
             Wait(0.5),
+            self.model.scaleInterval(0.3, 0.01),
+            Func(self._delete)
+            # Func(lambda: self.model.removeNode())
         ).start()
 
 
@@ -106,7 +122,7 @@ class Game(ShowBase):
         self.setup_controls()
         self.setup_collision_detection()
 
-        self.colors = Color.select(4)
+        self.colors = Colors.select(4)
         self.sphere_root = self.render.attachNewNode('sphereRoot')
         self.spheres = [[[None for _ in range(4)] for _ in range(4)] for _ in range(4)]
         self.setup_spheres()
@@ -143,8 +159,6 @@ class Game(ShowBase):
                 self.sphere_root, point, i, self.colors[idx], pos)
             self.spheres[x][y][z] = sphere
 
-        print(self.spheres)
-
     def get_components(self, i):
         x = i // 16
         y = (i // 4) % 4
@@ -155,15 +169,24 @@ class Game(ShowBase):
         if self.mouseWatcherNode.hasMouse():
             pos = self.mouseWatcherNode.getMouse()
             self.picker_ray.setFromLens(self.camNode, pos.getX(), pos.getY())
-
             self.picker.traverse(self.sphere_root)
-            # import pdb; pdb.set_trace()
+
             if self.handler.getNumEntries() > 0:
                 self.handler.sortEntries()
                 i = int(self.handler.getEntry(0).getIntoNode().getTag('sphere'))
                 print(i)
+                x, y, z = self.get_components(i)
+                sphere = self.spheres[x][y][z]
+                sphere.shake()
+
+                # import pdb; pdb.set_trace()
+                if self.is_delete(x, y, z, sphere.color):
+                    sphere.disappear()
+                    for x, y, z in self.check_neighbors(x, y, z, sphere.color):
+                        self.spheres[x][y][z].disappear()
+
                 # print([s.getIntoNode().getTag('sphere') for s in self.handler.getEntries()])
-                self.spheres[i].swing()
+                # self.spheres[i].swing()
 
     def update(self, task):
         dt = globalClock.getDt()
@@ -182,19 +205,52 @@ class Game(ShowBase):
             axis = Vec3.up()
 
         if rotation_angle := velocity * dt:
-            for i in range(64):
-                sphere = self.spheres[i]
-                sphere.rotate_around(rotation_angle, axis)
+            for x in range(SIZE):
+                for y in range(SIZE):
+                    for z in range(SIZE):
+                        sphere = self.spheres[x][y][z]
+                        sphere.rotate_around(rotation_angle, axis)
 
         return task.cont
+
+    def _check(self, x, y, z, color, dx=0, dy=0, dz=0):
+        x, y, z = x + dx, y + dy, z + dz
+
+        if not ((0 <= x < 4) and (0 <= y < 4) and (0 <= z < 4)):
+            return
+        if self.spheres[x][y][z].color != color:
+            return
+
+        yield (x, y, z)
+        yield from self._check(x, y, z, color, dx, dy, dz)
+
+    def check_neighbors(self, x, y, z, color):
+        yield from self._check(x, y, z, color, dx=1)
+        yield from self._check(x, y, z, color, dx=-1)
+        yield from self._check(x, y, z, color, dy=1)
+        yield from self._check(x, y, z, color, dy=-1)
+        yield from self._check(x, y, z, color, dz=1)
+        yield from self._check(x, y, z, color, dz=-1)
+
+    def is_delete(self, x, y, z, color):
+        if x + 1 < SIZE and self.spheres[x + 1][y][z].color == color:
+            return True
+        if x - 1 >= 0 and self.spheres[x - 1][y][z].color == color:
+            return True
+        if y + 1 < SIZE and self.spheres[x][y + 1][z].color == color:
+            return True
+        if y - 1 >= 0 and self.spheres[x][y - 1][z].color == color:
+            return True
+        if z + 1 < SIZE and self.spheres[x][y][z + 1].color == color:
+            return True
+        if z - 1 >= 0 and self.spheres[x][y][z - 1].color == color:
+            return True
+
+        return False
 
     def check_colors(self, i):
         # x * 16 + y * 4 + z
         x, y, z = self.get_components(i)
-        
-
-
-        
 
 
 game = Game()
