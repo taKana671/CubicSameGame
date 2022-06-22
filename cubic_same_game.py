@@ -1,3 +1,5 @@
+import itertools
+
 import random
 import sys
 from enum import Enum
@@ -22,16 +24,10 @@ PATH_PARTICLES = 'disappear.ptf'
 
 SIZE = 4
 
-
 TURN_UP = 'TurnUp'
 TURN_DOWN = 'TurnDown'
 TURN_RIGHT = 'TurnRight'
 TURN_LEFT = 'TurnLeft'
-
-# TURN_UP = 'TURN_UP'
-# TURN_DOWN = 'TURN_DOWN'
-# TURN_RIGHT = 'TURN_RIGHT'
-# TURN_LEFT = 'TURN_LEFT'
 
 
 class Colors(Enum):
@@ -151,13 +147,22 @@ class Game(ShowBase):
         pts = [-3, -1, 1, 3]
         point = Vec3(0, 0, 0)
 
-        for i in range(64):
-            x, y, z = self.get_components(i)
+        for i, (x, y, z) in enumerate(itertools.product(range(4), repeat=3)):
             idx = random.randint(0, 3)
             pos = Vec3(pts[x], pts[y], pts[z])
             sphere = Sphere(
-                self.sphere_root, point, i, self.colors[idx], pos)
+                self.sphere_root, point, i, self.colors[idx], pos
+            )
             self.spheres[x][y][z] = sphere
+
+        # for i in range(64):
+        #     x, y, z = self.get_components(i)
+        #     idx = random.randint(0, 3)
+        #     print(pts[x], pts[y], pts[z])
+        #     pos = Vec3(pts[x], pts[y], pts[z])
+        #     sphere = Sphere(
+        #         self.sphere_root, point, i, self.colors[idx], pos)
+        #     self.spheres[x][y][z] = sphere
 
     def get_components(self, i):
         x = i // 16
@@ -180,9 +185,9 @@ class Game(ShowBase):
                 sphere.shake()
 
                 # import pdb; pdb.set_trace()
-                if self.is_delete(x, y, z, sphere.color):
+                if self.is_deletable(x, y, z, sphere.color):
                     sphere.disappear()
-                    for x, y, z in self.check_neighbors(x, y, z, sphere.color):
+                    for x, y, z in self.find_same_colors(x, y, z, sphere.color):
                         self.spheres[x][y][z].disappear()
 
                 # print([s.getIntoNode().getTag('sphere') for s in self.handler.getEntries()])
@@ -205,48 +210,69 @@ class Game(ShowBase):
             axis = Vec3.up()
 
         if rotation_angle := velocity * dt:
-            for x in range(SIZE):
-                for y in range(SIZE):
-                    for z in range(SIZE):
-                        sphere = self.spheres[x][y][z]
-                        sphere.rotate_around(rotation_angle, axis)
+            for x, y, z in itertools.product(range(SIZE), repeat=3):
+                sphere = self.spheres[x][y][z]
+                sphere.rotate_around(rotation_angle, axis)
 
         return task.cont
 
-    def _check(self, x, y, z, color, dx=0, dy=0, dz=0):
+    def _find(self, x, y, z, color, dx=0, dy=0, dz=0):
         x, y, z = x + dx, y + dy, z + dz
-
         if not ((0 <= x < 4) and (0 <= y < 4) and (0 <= z < 4)):
             return
         if self.spheres[x][y][z].color != color:
             return
-
         yield (x, y, z)
-        yield from self._check(x, y, z, color, dx, dy, dz)
+        yield from self._find(x, y, z, color, dx, dy, dz)
 
-    def check_neighbors(self, x, y, z, color):
-        yield from self._check(x, y, z, color, dx=1)
-        yield from self._check(x, y, z, color, dx=-1)
-        yield from self._check(x, y, z, color, dy=1)
-        yield from self._check(x, y, z, color, dy=-1)
-        yield from self._check(x, y, z, color, dz=1)
-        yield from self._check(x, y, z, color, dz=-1)
+    def find_same_colors(self, x, y, z, color):
+        yield from self._find(x, y, z, color, dx=1)
+        yield from self._find(x, y, z, color, dx=-1)
+        yield from self._find(x, y, z, color, dy=1)
+        yield from self._find(x, y, z, color, dy=-1)
+        yield from self._find(x, y, z, color, dz=1)
+        yield from self._find(x, y, z, color, dz=-1)
 
-    def is_delete(self, x, y, z, color):
-        if x + 1 < SIZE and self.spheres[x + 1][y][z].color == color:
-            return True
-        if x - 1 >= 0 and self.spheres[x - 1][y][z].color == color:
-            return True
-        if y + 1 < SIZE and self.spheres[x][y + 1][z].color == color:
-            return True
-        if y - 1 >= 0 and self.spheres[x][y - 1][z].color == color:
-            return True
-        if z + 1 < SIZE and self.spheres[x][y][z + 1].color == color:
-            return True
-        if z - 1 >= 0 and self.spheres[x][y][z - 1].color == color:
-            return True
+    def get_neighbors(self, x, y, z):
+        for nx, ny, nz in [(x + 1, y, z), (x - 1, y, z), (x, y + 1, z),
+                           (x, y - 1, z), (x, y, z + 1), (x, y, z - 1)]:
+            if 0 <= nx < SIZE and 0 <= ny < SIZE and 0 <= nz < SIZE:
+                yield nx, ny, nz
 
+    def is_deletable(self, x, y, z, color):
+        for nx, ny, nz in self.get_neighbors(x, y, z):
+            if self.spheres[nx][ny][nz].color == color:
+                return True
         return False
+
+        # if x + 1 < SIZE and self.spheres[x + 1][y][z].color == color:
+        #     return True
+        # if x - 1 >= 0 and self.spheres[x - 1][y][z].color == color:
+        #     return True
+        # if y + 1 < SIZE and self.spheres[x][y + 1][z].color == color:
+        #     return True
+        # if y - 1 >= 0 and self.spheres[x][y - 1][z].color == color:
+        #     return True
+        # if z + 1 < SIZE and self.spheres[x][y][z + 1].color == color:
+        #     return True
+        # if z - 1 >= 0 and self.spheres[x][y][z - 1].color == color:
+        #     return True
+
+        # return False
+
+    def move(self):
+        for x, y, z in itertools.product(range(SIZE), repeat=3):
+            sphere = self.spheres[x][y][z]
+            if sphere.color:
+                pass
+
+    # def _move_to_center(self, x, y, z):
+    #     for nx, ny, nz in self.get_neighbors(x, y, z):
+
+
+
+
+
 
     def check_colors(self, i):
         # x * 16 + y * 4 + z
