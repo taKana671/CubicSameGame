@@ -2,12 +2,12 @@ import itertools
 
 import random
 import sys
-from enum import Enum
+from enum import Enum, auto
 
 from direct.particles.ParticleEffect import ParticleEffect
 
 
-from direct.interval.IntervalGlobal import Sequence, ParticleInterval, Func, Wait
+from direct.interval.IntervalGlobal import Sequence, Parallel, Func, Wait
 from direct.showbase.InputStateGlobal import inputState
 from direct.showbase.ShowBaseGlobal import globalClock
 from direct.showbase.ShowBase import ShowBase
@@ -28,6 +28,14 @@ TURN_UP = 'TurnUp'
 TURN_DOWN = 'TurnDown'
 TURN_RIGHT = 'TurnRight'
 TURN_LEFT = 'TurnLeft'
+
+
+class Status(Enum):
+
+    PLAY = auto()
+    CLICKED = auto()
+    DELETE = auto()
+    MOVE = auto()
 
 
 class Colors(Enum):
@@ -52,28 +60,33 @@ class Sphere:
         """color: LColor
            pos: Vec3
         """
+        self.tag = tag
         self.color = color
-        self.model_pos = pos
+        self.pos = pos
         self.point = point
 
         self.model = base.loader.loadModel(PATH_SPHERE)
         self.model.reparentTo(node_path)
         self.model.setScale(0.2)
         self.model.setColor(self.color)
-        self.model.setPos(self.model_pos)
+        self.model.setPos(self.pos)
 
         self.model.find('**/Sphere').node().setIntoCollideMask(BitMask32.bit(1))
-        self.model.find('**/Sphere').node().setTag('sphere', str(tag))
+        self.model.find('**/Sphere').node().setTag('sphere', str(self.tag))
         # render/sphereRoot/sphere.egg/Sphere
+
+    @property
+    def distance(self):
+        return (self.pos.x ** 2 + self.pos.y ** 2 + self.pos.z ** 2) ** 0.5
 
     def rotate_around(self, angle, axis):
         q = Quat()
         q.setFromAxisAngle(angle, axis.normalized())
-        r = q.xform(self.model_pos - self.point)
-        self.model_pos = self.point + r
+        r = q.xform(self.pos - self.point)
+        self.pos = self.point + r
 
         if self.model:
-            self.model.setPos(self.model_pos)
+            self.model.setPos(self.pos)
 
         # object_pos = self.model.getPos()
         # q = Quat()
@@ -81,13 +94,20 @@ class Sphere:
         # r = q.xform(object_pos - point)
         # rotated_pos = point + r
         # self.model.setPos(rotated_pos)
-    
+
     def shake(self):
-        Sequence(
-            self.model.posInterval(0.1, self.model_pos + (0, 0, 0.2)),
-            self.model.posInterval(0.1, self.model_pos - (0, 0, 0.2)),
-            self.model.posInterval(0.1, self.model_pos),
-        ).start()
+        return Sequence(
+            self.model.posInterval(0.1, self.pos + (0, 0, 0.2)),
+            self.model.posInterval(0.1, self.pos - (0, 0, 0.2)),
+            self.model.posInterval(0.1, self.pos),
+        )
+
+    #     # self.seq = Sequence(
+    #     #     self.model.posInterval(0.1, self.pos + (0, 0, 0.2)),
+    #     #     self.model.posInterval(0.1, self.pos - (0, 0, 0.2)),
+    #     #     self.model.posInterval(0.1, self.pos),
+    #     # )
+    #     # self.seq.start()
 
     def _delete(self):
         self.model.removeNode()
@@ -95,12 +115,32 @@ class Sphere:
         self.color = None
 
     def disappear(self):
-        Sequence(
-            Wait(0.5),
+        return Sequence(
             self.model.scaleInterval(0.3, 0.01),
             Func(self._delete)
             # Func(lambda: self.model.removeNode())
-        ).start()
+        )
+
+        # self.seq = Sequence(
+        #     Wait(0.5),
+        #     self.model.scaleInterval(0.3, 0.01),
+        #     Func(self._delete)
+        #     # Func(lambda: self.model.removeNode())
+        # )
+        # self.seq.start()
+
+    def _move(self, cell):
+        cell.model = self.model
+        cell.color = self.color
+        self.model, self.color = None, None
+
+    def move(self, cell):
+        self.seq = Sequence(
+            Wait(0.5),
+            self.model.posInterval(0.2, cell.pos),
+            Func(self._move, cell)
+        )
+        self.seq.start()
 
 
 class Game(ShowBase):
@@ -110,6 +150,8 @@ class Game(ShowBase):
         self.disableMouse()
         self.camera.setPos(20, -20, 15)
         self.camera.lookAt(0, 0, 0)
+        self.status = None
+        self.sphere = None
 
         self.wind = Window('CubicSameGame')
         self.ambient_light = BasicAmbientLight()
@@ -170,6 +212,7 @@ class Game(ShowBase):
         z = i % 4
         return x, y, z
 
+ 
     def click(self):
         if self.mouseWatcherNode.hasMouse():
             pos = self.mouseWatcherNode.getMouse()
@@ -178,20 +221,25 @@ class Game(ShowBase):
 
             if self.handler.getNumEntries() > 0:
                 self.handler.sortEntries()
-                i = int(self.handler.getEntry(0).getIntoNode().getTag('sphere'))
-                print(i)
-                x, y, z = self.get_components(i)
-                sphere = self.spheres[x][y][z]
-                sphere.shake()
-
-                # import pdb; pdb.set_trace()
-                if self.is_deletable(x, y, z, sphere.color):
-                    sphere.disappear()
-                    for x, y, z in self.find_same_colors(x, y, z, sphere.color):
-                        self.spheres[x][y][z].disappear()
-
+                tag = int(self.handler.getEntry(0).getIntoNode().getTag('sphere'))
                 # print([s.getIntoNode().getTag('sphere') for s in self.handler.getEntries()])
-                # self.spheres[i].swing()
+                print(tag)
+                self.delete(tag)
+
+    def delete(self, tag):
+        x, y, z = self.get_components(tag)
+        sphere = self.spheres[x][y][z]
+
+        self.sequence = Sequence(sphere.shake())
+        print(self.sequence)
+        # self.status = Status.CLICKED
+
+        if self.is_deletable(x, y, z, sphere.color):
+            para = Parallel(sphere.disappear())
+            for x, y, z in self.find_same_colors(x, y, z, sphere.color):
+                para.append(self.spheres[x][y][z].disappear())
+            self.sequence.append(para)
+        self.sequence.start()
 
     def update(self, task):
         dt = globalClock.getDt()
@@ -213,6 +261,11 @@ class Game(ShowBase):
             for x, y, z in itertools.product(range(SIZE), repeat=3):
                 sphere = self.spheres[x][y][z]
                 sphere.rotate_around(rotation_angle, axis)
+
+        # if self.status == Status.CLICKED:
+        #     if not self.sphere.shake.isPlaying:
+        #         self.
+
 
         return task.cont
 
@@ -264,10 +317,16 @@ class Game(ShowBase):
         for x, y, z in itertools.product(range(SIZE), repeat=3):
             sphere = self.spheres[x][y][z]
             if sphere.color:
-                pass
+                if empty_cells := [c for c in self.empty_cells(x, y, z)]:
+                    empty_cell = min(empty_cells, key=lambda x: x.distance)
+                    if empty_cell.distance < sphere.distance:
+                        sphere.move(empty_cell)
 
-    # def _move_to_center(self, x, y, z):
-    #     for nx, ny, nz in self.get_neighbors(x, y, z):
+    def empty_cells(self, x, y, z):
+        for nx, ny, nz in self.get_neighbors(x, y, z):
+            if not self.spheres[nx][ny][nz].color:
+                yield self.spheres[nx][ny][nz]
+
 
 
 
