@@ -1,5 +1,5 @@
 import itertools
-
+import datetime
 import random
 import sys
 from enum import Enum, auto
@@ -132,15 +132,14 @@ class Sphere:
     def _move(self, cell):
         cell.model = self.model
         cell.color = self.color
+        cell.model.find('**/Sphere').node().setTag('sphere', str(cell.tag))
         self.model, self.color = None, None
 
     def move(self, cell):
-        self.seq = Sequence(
-            Wait(0.5),
+        return Sequence(
             self.model.posInterval(0.2, cell.pos),
             Func(self._move, cell)
         )
-        self.seq.start()
 
 
 class Game(ShowBase):
@@ -151,7 +150,7 @@ class Game(ShowBase):
         self.camera.setPos(20, -20, 15)
         self.camera.lookAt(0, 0, 0)
         self.status = None
-        self.sphere = None
+        self.sphere_moving = None
 
         self.wind = Window('CubicSameGame')
         self.ambient_light = BasicAmbientLight()
@@ -212,7 +211,6 @@ class Game(ShowBase):
         z = i % 4
         return x, y, z
 
- 
     def click(self):
         if self.mouseWatcherNode.hasMouse():
             pos = self.mouseWatcherNode.getMouse()
@@ -231,8 +229,7 @@ class Game(ShowBase):
         sphere = self.spheres[x][y][z]
 
         self.sequence = Sequence(sphere.shake())
-        print(self.sequence)
-        # self.status = Status.CLICKED
+        # print(self.sequence)
 
         if self.is_deletable(x, y, z, sphere.color):
             para = Parallel(sphere.disappear())
@@ -240,6 +237,7 @@ class Game(ShowBase):
                 para.append(self.spheres[x][y][z].disappear())
             self.sequence.append(para)
         self.sequence.start()
+        self.status = Status.DELETE
 
     def update(self, task):
         dt = globalClock.getDt()
@@ -262,10 +260,17 @@ class Game(ShowBase):
                 sphere = self.spheres[x][y][z]
                 sphere.rotate_around(rotation_angle, axis)
 
-        # if self.status == Status.CLICKED:
-        #     if not self.sphere.shake.isPlaying:
-        #         self.
+        if self.status == Status.DELETE:
+            if not self.sequence.isPlaying():
+                self.status = Status.MOVE
 
+        if self.status == Status.MOVE:
+            if not self.sphere_moving:
+                if not self.move():
+                    self.status = Status.PLAY
+            else:
+                if not self.sphere_moving.isPlaying():
+                    self.sphere_moving = None
 
         return task.cont
 
@@ -313,14 +318,40 @@ class Game(ShowBase):
 
         # return False
 
+    
+    # def move(self):
+    #     for x, y, z in itertools.product(range(SIZE), repeat=3):
+    #         sphere = self.spheres[x][y][z]
+    #         if sphere.color:
+    #             if empty_cells := [c for c in self.empty_cells(x, y, z)]:
+    #                 print(x, y, z)
+    #                 print(empty_cells)
+    #                 # import pdb; pdb.set_trace()
+    #                 empty_cell = min(empty_cells, key=lambda x: x.distance)
+    #                 if empty_cell.distance < sphere.distance:
+    #                     self.sphere_moving = sphere.move(empty_cell)
+    #                     return True
+    #     return False
+
+    # def move(self):
+    #     if movable_spheres := [s for s in self._move()]:
+    #         self.sphere_moving = Sequence()
+    #         for s in movable_spheres:
+    #             self.sphere_moving.append(s)
+    #         self.sphere_moving.start()
+    #         return True
+    #     return False
+
     def move(self):
         for x, y, z in itertools.product(range(SIZE), repeat=3):
-            sphere = self.spheres[x][y][z]
-            if sphere.color:
+            if (sphere := self.spheres[x][y][z]).color:
+                print(datetime.datetime.now())
                 if empty_cells := [c for c in self.empty_cells(x, y, z)]:
                     empty_cell = min(empty_cells, key=lambda x: x.distance)
                     if empty_cell.distance < sphere.distance:
-                        sphere.move(empty_cell)
+                        self.sphere_moving = sphere.move(empty_cell)
+                        self.sphere_moving.start()
+                        return True
 
     def empty_cells(self, x, y, z):
         for nx, ny, nz in self.get_neighbors(x, y, z):
@@ -333,9 +364,9 @@ class Game(ShowBase):
 
 
 
-    def check_colors(self, i):
-        # x * 16 + y * 4 + z
-        x, y, z = self.get_components(i)
+    # def check_colors(self, i):
+    #     # x * 16 + y * 4 + z
+    #     x, y, z = self.get_components(i)
 
 
 game = Game()
