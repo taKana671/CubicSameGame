@@ -6,17 +6,18 @@ from enum import Enum, auto
 from direct.particles.ParticleEffect import ParticleEffect
 
 
+from direct.gui.DirectGui import OnscreenText, ScreenTitle
 from direct.interval.IntervalGlobal import Sequence, Parallel, Func, Wait
 from direct.showbase.InputStateGlobal import inputState
 from direct.showbase.ShowBaseGlobal import globalClock
 from direct.showbase.ShowBase import ShowBase
-from panda3d.core import NodePath, PandaNode, Quat, Vec3, LColor, BitMask32
+from panda3d.core import TextNode
+from panda3d.core import Quat, Vec3, LColor, BitMask32
 from panda3d.core import CollisionTraverser, CollisionNode
 from panda3d.core import CollisionHandlerQueue, CollisionRay
 
 from window import Window
 from lights import BasicAmbientLight, BasicDayLight
-
 
 PATH_SPHERE = 'models/alice-shapes--sphere/sphere'
 PATH_PARTICLES = 'disappear.ptf'
@@ -137,11 +138,13 @@ class Game(ShowBase):
         self.status = Status.PLAY
         self.sphere_moving = None
         self.deleted = False
+        self.score = 0
 
         self.wind = Window('CubicSameGame')
         self.ambient_light = BasicAmbientLight()
         self.directional_light = BasicDayLight()
 
+        self.setup_texts()
         self.setup_controls()
         self.setup_collision_detection()
 
@@ -150,6 +153,30 @@ class Game(ShowBase):
         self.spheres = [[[None for _ in range(4)] for _ in range(4)] for _ in range(4)]
         self.setup_spheres()
         self.taskMgr.add(self.update, 'update')
+
+    def setup_texts(self):
+        self.score_text = 'Score: {}'
+        self.score_dislay = OnscreenText(
+            text=self.score_text.format(self.score),
+            parent=self.a2dBottomRight,
+            style=ScreenTitle,
+            fg=(1, 1, 1, 1),
+            pos=(-0.1, 0.09),
+            align=TextNode.ARight,
+            scale=0.07,
+            mayChange=True
+        )
+        instructions = OnscreenText(
+            parent=self.a2dTopLeft,
+            style=ScreenTitle,
+            fg=(1, 1, 1, 1),
+            pos=(0.06, -0.1),
+            align=TextNode.ALeft,
+            scale=0.05
+        )
+        instructions.appendText('Esc: Quit\r\n')
+        instructions.appendText('Left-click: Select to delete\r\n')
+        instructions.appendText('Arrows: Rotate\r\n')
 
     def setup_collision_detection(self):
         self.picker = CollisionTraverser()
@@ -182,21 +209,6 @@ class Game(ShowBase):
             )
             self.spheres[x][y][z] = sphere
 
-        # for i in range(64):
-        #     x, y, z = self.get_components(i)
-        #     idx = random.randint(0, 3)
-        #     print(pts[x], pts[y], pts[z])
-        #     pos = Vec3(pts[x], pts[y], pts[z])
-        #     sphere = Sphere(
-        #         self.sphere_root, point, i, self.colors[idx], pos)
-        #     self.spheres[x][y][z] = sphere
-
-    def get_components(self, i):
-        x = i // 16
-        y = (i // 4) % 4
-        z = i % 4
-        return x, y, z
-
     def click(self):
         if self.mouseWatcherNode.hasMouse():
             pos = self.mouseWatcherNode.getMouse()
@@ -210,6 +222,16 @@ class Game(ShowBase):
                 print(tag)
                 self.delete(tag)
 
+    def get_components(self, tag):
+        x = tag // 16
+        y = (tag // 4) % 4
+        z = tag % 4
+        return x, y, z
+
+    def calc_score(self, cnt):
+        self.score += cnt
+        self.score_dislay.setText(self.score_text.format(self.score))
+
     def delete(self, tag):
         x, y, z = self.get_components(tag)
         sphere = self.spheres[x][y][z]
@@ -220,6 +242,7 @@ class Game(ShowBase):
             for x, y, z in self.find_same_colors(x, y, z, sphere.color):
                 para.append(self.spheres[x][y][z].disappear())
             self.sequence.append(para)
+            self.calc_score(len(para.ivals))
         self.sequence.start()
 
         if len(self.sequence.ivals) == 1:
@@ -296,21 +319,6 @@ class Game(ShowBase):
                 return True
         return False
 
-        # if x + 1 < SIZE and self.spheres[x + 1][y][z].color == color:
-        #     return True
-        # if x - 1 >= 0 and self.spheres[x - 1][y][z].color == color:
-        #     return True
-        # if y + 1 < SIZE and self.spheres[x][y + 1][z].color == color:
-        #     return True
-        # if y - 1 >= 0 and self.spheres[x][y - 1][z].color == color:
-        #     return True
-        # if z + 1 < SIZE and self.spheres[x][y][z + 1].color == color:
-        #     return True
-        # if z - 1 >= 0 and self.spheres[x][y][z - 1].color == color:
-        #     return True
-
-        # return False
-
     def move(self):
         if destinations := [cell for cell in self.set_destinations()]:
             # print([(d.tag, d.destination) for d in destinations])
@@ -323,18 +331,29 @@ class Game(ShowBase):
         return False
 
     def set_destinations(self):
-        search = True
-        while search:
-            search = False
-            for x, y, z in itertools.product(range(SIZE), repeat=3):
-                if (sphere := self.spheres[x][y][z]).color:
-                    if empty_cells := [c for c in self.empty_cells(x, y, z)]:
-                        empty_cell = min(empty_cells, key=lambda x: x.distance)
-                        if empty_cell.distance < sphere.distance:
-                            sphere.set_destination(empty_cell)
-                            yield empty_cell
-                            search = True
-                            break
+        for x, y, z in itertools.product(range(SIZE), repeat=3):
+            if (sphere := self.spheres[x][y][z]).color:
+                if empty_cells := [c for c in self.empty_cells(x, y, z)]:
+                    empty_cell = min(empty_cells, key=lambda x: x.distance)
+                    if empty_cell.distance < sphere.distance:
+                        sphere.set_destination(empty_cell)
+                        yield empty_cell
+                        yield from self.set_destinations()
+                        break
+
+    # def set_destinations(self):
+    #     search = True
+    #     while search:
+    #         search = False
+    #         for x, y, z in itertools.product(range(SIZE), repeat=3):
+    #             if (sphere := self.spheres[x][y][z]).color:
+    #                 if empty_cells := [c for c in self.empty_cells(x, y, z)]:
+    #                     empty_cell = min(empty_cells, key=lambda x: x.distance)
+    #                     if empty_cell.distance < sphere.distance:
+    #                         sphere.set_destination(empty_cell)
+    #                         yield empty_cell
+    #                         search = True
+    #                         break
 
     def empty_cells(self, x, y, z):
         for nx, ny, nz in self.get_neighbors(x, y, z):
@@ -344,7 +363,7 @@ class Game(ShowBase):
 
     # def check_colors(self, i):
     #     # x * 16 + y * 4 + z
-    #     x, y, z = self.get_components(i)
+    
 
 
 game = Game()
