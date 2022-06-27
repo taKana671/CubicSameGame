@@ -36,6 +36,8 @@ class Status(Enum):
     CLICKED = auto()
     DELETE = auto()
     MOVE = auto()
+    JUDGE = auto()
+    GAMEOVER = auto()
 
 
 class Colors(Enum):
@@ -137,7 +139,6 @@ class Game(ShowBase):
         self.camera.lookAt(0, 0, 0)
         self.status = Status.PLAY
         self.sphere_moving = None
-        self.deleted = False
         self.score = 0
 
         self.wind = Window('CubicSameGame')
@@ -148,17 +149,15 @@ class Game(ShowBase):
         self.setup_controls()
         self.setup_collision_detection()
 
-        self.colors = Colors.select(4)
         self.sphere_root = self.render.attachNewNode('sphereRoot')
-        self.spheres = [[[None for _ in range(4)] for _ in range(4)] for _ in range(4)]
         self.setup_spheres()
         self.taskMgr.add(self.update, 'update')
 
     def setup_texts(self):
         self.score_text = 'Score: {}'
         self.score_dislay = OnscreenText(
-            text=self.score_text.format(self.score),
             parent=self.a2dBottomRight,
+            text=self.score_text.format(self.score),
             style=ScreenTitle,
             fg=(1, 1, 1, 1),
             pos=(-0.1, 0.09),
@@ -200,6 +199,8 @@ class Game(ShowBase):
     def setup_spheres(self):
         pts = [-3, -1, 1, 3]
         point = Vec3(0, 0, 0)
+        self.colors = Colors.select(4)
+        self.spheres = [[[None for _ in range(4)] for _ in range(4)] for _ in range(4)]
 
         for i, (x, y, z) in enumerate(itertools.product(range(4), repeat=3)):
             idx = random.randint(0, 3)
@@ -228,7 +229,7 @@ class Game(ShowBase):
         z = tag % 4
         return x, y, z
 
-    def calc_score(self, cnt):
+    def show_score(self, cnt=0):
         self.score += cnt
         self.score_dislay.setText(self.score_text.format(self.score))
 
@@ -242,7 +243,7 @@ class Game(ShowBase):
             for x, y, z in self.find_same_colors(x, y, z, sphere.color):
                 para.append(self.spheres[x][y][z].disappear())
             self.sequence.append(para)
-            self.calc_score(len(para.ivals))
+            self.show_score(len(para.ivals))
         self.sequence.start()
 
         if len(self.sequence.ivals) == 1:
@@ -283,10 +284,21 @@ class Game(ShowBase):
         if self.status == Status.MOVE:
             if not self.sphere_moving:
                 if not self.move():
-                    self.status = Status.PLAY
+                    # self.status = Status.PLAY
+                    self.status = Status.JUDGE
             else:
                 if not self.sphere_moving.isPlaying():
                     self.sphere_moving = None
+
+        if self.status == Status.JUDGE:
+            if self.game_over():
+                self.status = Status.GAMEOVER
+            else:
+                self.status = Status.PLAY
+
+        if self.status == Status.GAMEOVER:
+            if not self.gameover_seq.isPlaying():
+                self.status = Status.PLAY
 
         return task.cont
 
@@ -359,6 +371,39 @@ class Game(ShowBase):
         for nx, ny, nz in self.get_neighbors(x, y, z):
             if not self.spheres[nx][ny][nz].color:
                 yield self.spheres[nx][ny][nz]
+
+    def _initialize(self):
+        self.sphere_moving = None
+        self.score = 0
+        self.show_score()
+        self.setup_spheres()
+
+    def is_gameover(self):
+        for x, y, z in itertools.product(range(SIZE), repeat=3):
+            if color := self.spheres[x][y][z].color:
+                if self.is_deletable(x, y, z, color):
+                    return False
+        return True
+
+    def game_over(self):
+        if self.is_gameover():
+            self.score_dislay.setText('Game Over')
+            para = Parallel()
+            for x, y, z in itertools.product(range(SIZE), repeat=3):
+                if (sphere := self.spheres[x][y][z]).color:
+                    para.append(sphere.disappear())
+
+            self.gameover_seq = Sequence(
+                Wait(3),
+                para,
+                Wait(2),
+                Func(self._initialize)
+            )
+            self.gameover_seq.start()
+            return True
+        return False
+       
+
 
 
     # def check_colors(self, i):
