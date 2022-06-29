@@ -3,9 +3,6 @@ import random
 import sys
 from enum import Enum, auto
 
-from direct.particles.ParticleEffect import ParticleEffect
-
-
 from direct.gui.DirectGui import OnscreenText, ScreenTitle
 from direct.interval.IntervalGlobal import Sequence, Parallel, Func, Wait
 from direct.showbase.InputStateGlobal import inputState
@@ -18,16 +15,26 @@ from panda3d.core import CollisionHandlerQueue, CollisionRay
 
 from window import Window
 from lights import BasicAmbientLight, BasicDayLight
+# from panda3d.core import AmbientLight, DirectionalLight
+
 
 PATH_SPHERE = 'models/alice-shapes--sphere/sphere'
-PATH_PARTICLES = 'disappear.ptf'
-
 SIZE = 4
 
-TURN_UP = 'TurnUp'
-TURN_DOWN = 'TurnDown'
-TURN_RIGHT = 'TurnRight'
-TURN_LEFT = 'TurnLeft'
+
+class Arrow(Enum):
+    UP = 'arrow_down'
+    DOWN = 'arrow_up'
+    RIGHT = 'arrow_left'
+    LEFT = 'arrow_right'
+
+    @property
+    def key(self):
+        return self.name
+
+    @classmethod
+    def keys(cls):
+        return [(c.name, c.value) for c in cls]
 
 
 class Status(Enum):
@@ -36,6 +43,8 @@ class Status(Enum):
     CLICKED = auto()
     DELETE = auto()
     MOVE = auto()
+    JUDGE = auto()
+    GAMEOVER = auto()
 
 
 class Colors(Enum):
@@ -69,6 +78,7 @@ class Sphere:
         self.model = base.loader.loadModel(PATH_SPHERE)
         self.model.reparentTo(node_path)
         self.model.setScale(0.2)
+
         self.model.setColor(self.color)
         self.model.setPos(self.pos)
 
@@ -88,13 +98,6 @@ class Sphere:
 
         if self.model:
             self.model.setPos(self.pos)
-
-        # object_pos = self.model.getPos()
-        # q = Quat()
-        # q.setFromAxisAngle(angle, axis.normalized())
-        # r = q.xform(object_pos - point)
-        # rotated_pos = point + r
-        # self.model.setPos(rotated_pos)
 
     def shake(self):
         return Sequence(
@@ -137,28 +140,27 @@ class Game(ShowBase):
         self.camera.lookAt(0, 0, 0)
         self.status = Status.PLAY
         self.sphere_moving = None
-        self.deleted = False
         self.score = 0
 
         self.wind = Window('CubicSameGame')
         self.ambient_light = BasicAmbientLight()
         self.directional_light = BasicDayLight()
+        # self.setup_lights()
 
         self.setup_texts()
         self.setup_controls()
         self.setup_collision_detection()
 
-        self.colors = Colors.select(4)
         self.sphere_root = self.render.attachNewNode('sphereRoot')
-        self.spheres = [[[None for _ in range(4)] for _ in range(4)] for _ in range(4)]
         self.setup_spheres()
+
         self.taskMgr.add(self.update, 'update')
 
     def setup_texts(self):
         self.score_text = 'Score: {}'
         self.score_dislay = OnscreenText(
-            text=self.score_text.format(self.score),
             parent=self.a2dBottomRight,
+            text=self.score_text.format(self.score),
             style=ScreenTitle,
             fg=(1, 1, 1, 1),
             pos=(-0.1, 0.09),
@@ -192,14 +194,15 @@ class Game(ShowBase):
     def setup_controls(self):
         self.accept('mouse1', self.click)
         self.accept("escape", sys.exit)
-        inputState.watchWithModifiers(TURN_UP, 'arrow_up')
-        inputState.watchWithModifiers(TURN_DOWN, 'arrow_down')
-        inputState.watchWithModifiers(TURN_LEFT, 'arrow_left')
-        inputState.watchWithModifiers(TURN_RIGHT, 'arrow_right')
+
+        for name, key in Arrow.keys():
+            inputState.watchWithModifiers(name, key)
 
     def setup_spheres(self):
         pts = [-3, -1, 1, 3]
         point = Vec3(0, 0, 0)
+        self.colors = Colors.select(4)
+        self.spheres = [[[None for _ in range(4)] for _ in range(4)] for _ in range(4)]
 
         for i, (x, y, z) in enumerate(itertools.product(range(4), repeat=3)):
             idx = random.randint(0, 3)
@@ -228,27 +231,22 @@ class Game(ShowBase):
         z = tag % 4
         return x, y, z
 
-    def calc_score(self, cnt):
+    def show_score(self, cnt=0):
         self.score += cnt
         self.score_dislay.setText(self.score_text.format(self.score))
 
     def delete(self, tag):
         x, y, z = self.get_components(tag)
-        sphere = self.spheres[x][y][z]
-        self.sequence = Sequence(sphere.shake())
+        self.sequence = Sequence(self.spheres[x][y][z].shake())
+        self.status = Status.CLICKED
 
-        if self.is_deletable(x, y, z, sphere.color):
-            para = Parallel(sphere.disappear())
-            for x, y, z in self.find_same_colors(x, y, z, sphere.color):
-                para.append(self.spheres[x][y][z].disappear())
-            self.sequence.append(para)
-            self.calc_score(len(para.ivals))
-        self.sequence.start()
-
-        if len(self.sequence.ivals) == 1:
-            self.status = Status.CLICKED
-        else:
+        if same_spheres := [s.disappear() for s in self.find_same_colors(x, y, z)]:
+            disappear = Parallel(*same_spheres)
+            self.show_score(len(disappear))
+            self.sequence.append(disappear)
             self.status = Status.DELETE
+
+        self.sequence.start()
 
     def update(self, task):
         if self.status == Status.PLAY:
@@ -256,14 +254,18 @@ class Game(ShowBase):
             velocity = 0
             axis = Vec3.forward()
 
-            if inputState.isSet(TURN_UP):
+            # if inputState.isSet(TURN_UP):
+            if inputState.isSet(Arrow.UP.key):
                 velocity += 10
-            elif inputState.isSet(TURN_DOWN):
+            # elif inputState.isSet(TURN_DOWN):
+            elif inputState.isSet(Arrow.DOWN.key):
                 velocity -= 10
-            elif inputState.isSet(TURN_LEFT):
+            # elif inputState.isSet(TURN_LEFT):
+            elif inputState.isSet(Arrow.LEFT.key):
                 velocity += 10
                 axis = Vec3.up()
-            elif inputState.isSet(TURN_RIGHT):
+            # elif inputState.isSet(TURN_RIGHT):
+            elif inputState.isSet(Arrow.RIGHT.key):
                 velocity -= 10
                 axis = Vec3.up()
 
@@ -283,10 +285,17 @@ class Game(ShowBase):
         if self.status == Status.MOVE:
             if not self.sphere_moving:
                 if not self.move():
-                    self.status = Status.PLAY
+                    if self.is_gameover():
+                        self.status = Status.GAMEOVER
+                    else:
+                        self.status = Status.PLAY
             else:
                 if not self.sphere_moving.isPlaying():
                     self.sphere_moving = None
+
+        if self.status == Status.GAMEOVER:
+            if not self.gameover_seq.isPlaying():
+                self.status = Status.PLAY
 
         return task.cont
 
@@ -296,16 +305,20 @@ class Game(ShowBase):
             return
         if self.spheres[x][y][z].color != color:
             return
-        yield (x, y, z)
+
+        yield self.spheres[x][y][z]
         yield from self._find(x, y, z, color, dx, dy, dz)
 
-    def find_same_colors(self, x, y, z, color):
-        yield from self._find(x, y, z, color, dx=1)
-        yield from self._find(x, y, z, color, dx=-1)
-        yield from self._find(x, y, z, color, dy=1)
-        yield from self._find(x, y, z, color, dy=-1)
-        yield from self._find(x, y, z, color, dz=1)
-        yield from self._find(x, y, z, color, dz=-1)
+    def find_same_colors(self, x, y, z):
+        if self.is_deletable(x, y, z):
+            sphere = self.spheres[x][y][z]
+            yield sphere
+            yield from self._find(x, y, z, sphere.color, dx=1)
+            yield from self._find(x, y, z, sphere.color, dx=-1)
+            yield from self._find(x, y, z, sphere.color, dy=1)
+            yield from self._find(x, y, z, sphere.color, dy=-1)
+            yield from self._find(x, y, z, sphere.color, dz=1)
+            yield from self._find(x, y, z, sphere.color, dz=-1)
 
     def get_neighbors(self, x, y, z):
         for nx, ny, nz in [(x + 1, y, z), (x - 1, y, z), (x, y + 1, z),
@@ -313,19 +326,16 @@ class Game(ShowBase):
             if 0 <= nx < SIZE and 0 <= ny < SIZE and 0 <= nz < SIZE:
                 yield nx, ny, nz
 
-    def is_deletable(self, x, y, z, color):
+    def is_deletable(self, x, y, z):
         for nx, ny, nz in self.get_neighbors(x, y, z):
-            if self.spheres[nx][ny][nz].color == color:
+            if self.spheres[nx][ny][nz].color == self.spheres[x][y][z].color:
                 return True
         return False
 
     def move(self):
         if destinations := [cell for cell in self.set_destinations()]:
-            # print([(d.tag, d.destination) for d in destinations])
-            self.sphere_moving = Parallel()
-            for cell in destinations:
-                if cell.destination:
-                    self.sphere_moving.append(cell.move_model())
+            self.sphere_moving = Parallel(
+                *[c.move_model() for c in destinations if c.destination])
             self.sphere_moving.start()
             return True
         return False
@@ -341,29 +351,51 @@ class Game(ShowBase):
                         yield from self.set_destinations()
                         break
 
-    # def set_destinations(self):
-    #     search = True
-    #     while search:
-    #         search = False
-    #         for x, y, z in itertools.product(range(SIZE), repeat=3):
-    #             if (sphere := self.spheres[x][y][z]).color:
-    #                 if empty_cells := [c for c in self.empty_cells(x, y, z)]:
-    #                     empty_cell = min(empty_cells, key=lambda x: x.distance)
-    #                     if empty_cell.distance < sphere.distance:
-    #                         sphere.set_destination(empty_cell)
-    #                         yield empty_cell
-    #                         search = True
-    #                         break
-
     def empty_cells(self, x, y, z):
         for nx, ny, nz in self.get_neighbors(x, y, z):
             if not self.spheres[nx][ny][nz].color:
                 yield self.spheres[nx][ny][nz]
 
+    def _initialize(self):
+        self.sphere_moving = None
+        self.score = 0
+        self.show_score()
+        self.setup_spheres()
 
-    # def check_colors(self, i):
-    #     # x * 16 + y * 4 + z
-    
+    def is_gameover(self):
+        if self.can_continue():
+            return False
+
+        msg = OnscreenText(
+            parent=self.aspect2d,
+            text='You Won!' if self.score == 64 else 'Game Over',
+            style=ScreenTitle,
+            fg=(1, 1, 1, 1),
+            pos=(0, 0),
+            align=TextNode.ACenter,
+            scale=0.2
+        )
+        self.gameover_seq = Sequence(
+            Wait(1),
+            msg.scaleInterval(0.5, 0.01),
+            Func(lambda: msg.destroy()),
+            Wait(0.5)
+        )
+        if left_spheres := [s.disappear() for x, y, z in itertools.product(range(SIZE), repeat=3)
+                            if (s := self.spheres[x][y][z]).color]:
+            self.gameover_seq.extend([Parallel(*left_spheres), Wait(0.5)])
+
+        self.gameover_seq.append(Func(self._initialize))
+        self.gameover_seq.start()
+
+        return True
+
+    def can_continue(self):
+        for x, y, z in itertools.product(range(SIZE), repeat=3):
+            if self.spheres[x][y][z].color:
+                if self.is_deletable(x, y, z):
+                    return True
+        return False
 
 
 game = Game()
