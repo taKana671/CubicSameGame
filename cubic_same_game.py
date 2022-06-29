@@ -15,14 +15,26 @@ from panda3d.core import CollisionHandlerQueue, CollisionRay
 
 from window import Window
 from lights import BasicAmbientLight, BasicDayLight
+# from panda3d.core import AmbientLight, DirectionalLight
+
 
 PATH_SPHERE = 'models/alice-shapes--sphere/sphere'
 SIZE = 4
 
-TURN_UP = 'TurnUp'
-TURN_DOWN = 'TurnDown'
-TURN_RIGHT = 'TurnRight'
-TURN_LEFT = 'TurnLeft'
+
+class Arrow(Enum):
+    UP = 'arrow_down'
+    DOWN = 'arrow_up'
+    RIGHT = 'arrow_left'
+    LEFT = 'arrow_right'
+
+    @property
+    def key(self):
+        return self.name
+
+    @classmethod
+    def keys(cls):
+        return [(c.name, c.value) for c in cls]
 
 
 class Status(Enum):
@@ -66,7 +78,6 @@ class Sphere:
         self.model = base.loader.loadModel(PATH_SPHERE)
         self.model.reparentTo(node_path)
         self.model.setScale(0.2)
-        # self.model.setScale(0.01)
 
         self.model.setColor(self.color)
         self.model.setPos(self.pos)
@@ -87,13 +98,6 @@ class Sphere:
 
         if self.model:
             self.model.setPos(self.pos)
-
-        # object_pos = self.model.getPos()
-        # q = Quat()
-        # q.setFromAxisAngle(angle, axis.normalized())
-        # r = q.xform(object_pos - point)
-        # rotated_pos = point + r
-        # self.model.setPos(rotated_pos)
 
     def shake(self):
         return Sequence(
@@ -141,6 +145,7 @@ class Game(ShowBase):
         self.wind = Window('CubicSameGame')
         self.ambient_light = BasicAmbientLight()
         self.directional_light = BasicDayLight()
+        # self.setup_lights()
 
         self.setup_texts()
         self.setup_controls()
@@ -189,18 +194,15 @@ class Game(ShowBase):
     def setup_controls(self):
         self.accept('mouse1', self.click)
         self.accept("escape", sys.exit)
-        inputState.watchWithModifiers(TURN_UP, 'arrow_up')
-        inputState.watchWithModifiers(TURN_DOWN, 'arrow_down')
-        inputState.watchWithModifiers(TURN_LEFT, 'arrow_left')
-        inputState.watchWithModifiers(TURN_RIGHT, 'arrow_right')
+
+        for name, key in Arrow.keys():
+            inputState.watchWithModifiers(name, key)
 
     def setup_spheres(self):
         pts = [-3, -1, 1, 3]
         point = Vec3(0, 0, 0)
         self.colors = Colors.select(4)
         self.spheres = [[[None for _ in range(4)] for _ in range(4)] for _ in range(4)]
-
-        # para = Parallel()
 
         for i, (x, y, z) in enumerate(itertools.product(range(4), repeat=3)):
             idx = random.randint(0, 3)
@@ -209,9 +211,6 @@ class Game(ShowBase):
                 self.sphere_root, point, i, self.colors[idx], pos
             )
             self.spheres[x][y][z] = sphere
-
-        #     para.append(sphere.model.scaleInterval(0.3, 0.2))
-        # para.start()
 
     def click(self):
         if self.mouseWatcherNode.hasMouse():
@@ -255,14 +254,18 @@ class Game(ShowBase):
             velocity = 0
             axis = Vec3.forward()
 
-            if inputState.isSet(TURN_UP):
+            # if inputState.isSet(TURN_UP):
+            if inputState.isSet(Arrow.UP.key):
                 velocity += 10
-            elif inputState.isSet(TURN_DOWN):
+            # elif inputState.isSet(TURN_DOWN):
+            elif inputState.isSet(Arrow.DOWN.key):
                 velocity -= 10
-            elif inputState.isSet(TURN_LEFT):
+            # elif inputState.isSet(TURN_LEFT):
+            elif inputState.isSet(Arrow.LEFT.key):
                 velocity += 10
                 axis = Vec3.up()
-            elif inputState.isSet(TURN_RIGHT):
+            # elif inputState.isSet(TURN_RIGHT):
+            elif inputState.isSet(Arrow.RIGHT.key):
                 velocity -= 10
                 axis = Vec3.up()
 
@@ -331,11 +334,8 @@ class Game(ShowBase):
 
     def move(self):
         if destinations := [cell for cell in self.set_destinations()]:
-            # print([(d.tag, d.destination) for d in destinations])
-            self.sphere_moving = Parallel()
-            for cell in destinations:
-                if cell.destination:
-                    self.sphere_moving.append(cell.move_model())
+            self.sphere_moving = Parallel(
+                *[c.move_model() for c in destinations if c.destination])
             self.sphere_moving.start()
             return True
         return False
@@ -350,20 +350,6 @@ class Game(ShowBase):
                         yield empty_cell
                         yield from self.set_destinations()
                         break
-
-    # def set_destinations(self):
-    #     search = True
-    #     while search:
-    #         search = False
-    #         for x, y, z in itertools.product(range(SIZE), repeat=3):
-    #             if (sphere := self.spheres[x][y][z]).color:
-    #                 if empty_cells := [c for c in self.empty_cells(x, y, z)]:
-    #                     empty_cell = min(empty_cells, key=lambda x: x.distance)
-    #                     if empty_cell.distance < sphere.distance:
-    #                         sphere.set_destination(empty_cell)
-    #                         yield empty_cell
-    #                         search = True
-    #                         break
 
     def empty_cells(self, x, y, z):
         for nx, ny, nz in self.get_neighbors(x, y, z):
@@ -380,26 +366,28 @@ class Game(ShowBase):
         if self.can_continue():
             return False
 
-        if self.score == 64:
-            self.score_dislay.setText('You Won!')
-        else:
-            self.score_dislay.setText('Game Over')
-
-        # para = Parallel()
-        li = []
-        for x, y, z in itertools.product(range(SIZE), repeat=3):
-            if (sphere := self.spheres[x][y][z]).color:
-                li.append(sphere.disappear())
-                # para.append(sphere.shake, sphere.disappear)
-
-        # para = Parallel(*li)
-        self.gameover_seq = Sequence(
-            Wait(3),
-            Parallel(*li),
-            Wait(3),
-            Func(self._initialize)
+        msg = OnscreenText(
+            parent=self.aspect2d,
+            text='You Won!' if self.score == 64 else 'Game Over',
+            style=ScreenTitle,
+            fg=(1, 1, 1, 1),
+            pos=(0, 0),
+            align=TextNode.ACenter,
+            scale=0.2
         )
+        self.gameover_seq = Sequence(
+            Wait(1),
+            msg.scaleInterval(0.5, 0.01),
+            Func(lambda: msg.destroy()),
+            Wait(0.5)
+        )
+        if left_spheres := [s.disappear() for x, y, z in itertools.product(range(SIZE), repeat=3)
+                            if (s := self.spheres[x][y][z]).color]:
+            self.gameover_seq.extend([Parallel(*left_spheres), Wait(0.5)])
+
+        self.gameover_seq.append(Func(self._initialize))
         self.gameover_seq.start()
+
         return True
 
     def can_continue(self):
