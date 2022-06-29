@@ -254,17 +254,13 @@ class Game(ShowBase):
             velocity = 0
             axis = Vec3.forward()
 
-            # if inputState.isSet(TURN_UP):
             if inputState.isSet(Arrow.UP.key):
                 velocity += 10
-            # elif inputState.isSet(TURN_DOWN):
             elif inputState.isSet(Arrow.DOWN.key):
                 velocity -= 10
-            # elif inputState.isSet(TURN_LEFT):
             elif inputState.isSet(Arrow.LEFT.key):
                 velocity += 10
                 axis = Vec3.up()
-            # elif inputState.isSet(TURN_RIGHT):
             elif inputState.isSet(Arrow.RIGHT.key):
                 velocity -= 10
                 axis = Vec3.up()
