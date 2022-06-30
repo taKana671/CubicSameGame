@@ -9,13 +9,11 @@ from direct.showbase.InputStateGlobal import inputState
 from direct.showbase.ShowBaseGlobal import globalClock
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import TextNode
-from panda3d.core import Quat, Vec3, LColor, BitMask32
+from panda3d.core import Quat, Vec3, LColor, BitMask32, Point3
+from panda3d.core import AmbientLight, DirectionalLight
 from panda3d.core import CollisionTraverser, CollisionNode
 from panda3d.core import CollisionHandlerQueue, CollisionRay
-
-from window import Window
-from lights import BasicAmbientLight, BasicDayLight
-# from panda3d.core import AmbientLight, DirectionalLight
+from panda3d.core import WindowProperties
 
 
 PATH_SPHERE = 'models/alice-shapes--sphere/sphere'
@@ -142,11 +140,8 @@ class Game(ShowBase):
         self.sphere_moving = None
         self.score = 0
 
-        self.wind = Window('CubicSameGame')
-        self.ambient_light = BasicAmbientLight()
-        self.directional_light = BasicDayLight()
-        # self.setup_lights()
-
+        self.setup_window()
+        self.setup_lights()
         self.setup_texts()
         self.setup_controls()
         self.setup_collision_detection()
@@ -180,6 +175,27 @@ class Game(ShowBase):
         instructions.appendText('Left-click: Select to delete\r\n')
         instructions.appendText('Arrows: Rotate\r\n')
 
+    def setup_window(self):
+        props = WindowProperties()
+        props.setTitle('CubicSameGame')
+        props.setSize(800, 600)
+        self.win.requestProperties(props)
+        self.setBackgroundColor(0.1, 0.1, 0.1)
+
+    def setup_lights(self):
+        ambient_light = self.render.attachNewNode(AmbientLight('ambientLight'))
+        ambient_light.node().setColor(LColor(0.6, 0.6, 0.6, 1))
+        self.render.setLight(ambient_light)
+
+        directional_light = self.render.attachNewNode(DirectionalLight('directionalLight'))
+        directional_light.node().getLens().setFilmSize(200, 200)
+        directional_light.node().getLens().setNearFar(1, 100)
+        directional_light.node().setColor(LColor(1, 1, 1, 1))
+        directional_light.setPosHpr(Point3(0, 0, 30), Vec3(-30, -45, 0))
+        directional_light.node().setShadowCaster(True)
+        self.render.setShaderAuto()
+        self.render.setLight(directional_light)
+
     def setup_collision_detection(self):
         self.picker = CollisionTraverser()
         self.handler = CollisionHandlerQueue()
@@ -199,12 +215,14 @@ class Game(ShowBase):
             inputState.watchWithModifiers(name, key)
 
     def setup_spheres(self):
-        pts = [-3, -1, 1, 3]
+        start = SIZE // 2 * -2 + 1 if SIZE % 2 == 0 else SIZE // 2 * -2
+        pts = [start + i * 2 for i in range(SIZE)]
+        # pts = [-3, -1, 1, 3]
         point = Vec3(0, 0, 0)
         self.colors = Colors.select(4)
-        self.spheres = [[[None for _ in range(4)] for _ in range(4)] for _ in range(4)]
+        self.spheres = [[[None for _ in range(SIZE)] for _ in range(SIZE)] for _ in range(SIZE)]
 
-        for i, (x, y, z) in enumerate(itertools.product(range(4), repeat=3)):
+        for i, (x, y, z) in enumerate(itertools.product(range(SIZE), repeat=3)):
             idx = random.randint(0, 3)
             pos = Vec3(pts[x], pts[y], pts[z])
             sphere = Sphere(
@@ -226,9 +244,9 @@ class Game(ShowBase):
                 self.delete(tag)
 
     def get_components(self, tag):
-        x = tag // 16
-        y = (tag // 4) % 4
-        z = tag % 4
+        x = tag // SIZE ** 2
+        y = (tag // SIZE) % SIZE
+        z = tag % SIZE
         return x, y, z
 
     def show_score(self, cnt=0):
@@ -297,7 +315,7 @@ class Game(ShowBase):
 
     def _find(self, x, y, z, color, dx=0, dy=0, dz=0):
         x, y, z = x + dx, y + dy, z + dz
-        if not ((0 <= x < 4) and (0 <= y < 4) and (0 <= z < 4)):
+        if not ((0 <= x < SIZE) and (0 <= y < SIZE) and (0 <= z < SIZE)):
             return
         if self.spheres[x][y][z].color != color:
             return
@@ -364,7 +382,7 @@ class Game(ShowBase):
 
         msg = OnscreenText(
             parent=self.aspect2d,
-            text='You Won!' if self.score == 64 else 'Game Over',
+            text='You Won!' if self.score == SIZE ** 3 else 'Game Over',
             style=ScreenTitle,
             fg=(1, 1, 1, 1),
             pos=(0, 0),
