@@ -55,7 +55,7 @@ class Colors(Enum):
     MAGENTA = LColor(1, 0, 1, 1)
     PURPLE = LColor(0.501, 0, 0.501, 1)
     LIME = LColor(0, 1, 0, 1)
-    PINK = LColor(1, 0.07, 0.57, 1)
+    Violet = LColor(0.54, 0.16, 0.88, 1)
     SKY = LColor(0, 0.74, 1, 1)
 
     @classmethod
@@ -141,7 +141,8 @@ class Game(ShowBase):
         self.status = Status.PLAY
         self.sphere_moving = None
         self.score = 0
-        self.size = 2
+        self.options = ['3', '4', '5', '6']
+        self.size = self.next_size = 3
 
         self.setup_window()
         self.setup_lights()
@@ -235,7 +236,7 @@ class Game(ShowBase):
             self.spheres[x][y][z] = sphere
 
     def click(self):
-        if self.mouseWatcherNode.hasMouse():
+        if self.mouseWatcherNode.hasMouse() and self.status == Status.PLAY:
             pos = self.mouseWatcherNode.getMouse()
             self.picker_ray.setFromLens(self.camNode, pos.getX(), pos.getY())
             self.picker.traverse(self.sphere_root)
@@ -295,12 +296,10 @@ class Game(ShowBase):
         if self.status == Status.CLICKED:
             if not self.sequence.isPlaying():
                 self.status = Status.PLAY
-
-        if self.status == Status.DELETE:
+        elif self.status == Status.DELETE:
             if not self.sequence.isPlaying():
                 self.status = Status.MOVE
-
-        if self.status == Status.MOVE:
+        elif self.status == Status.MOVE:
             if not self.sphere_moving:
                 if not self.move():
                     if self.can_continue():
@@ -308,16 +307,10 @@ class Game(ShowBase):
                     else:
                         self.status = Status.GAMEOVER
                         self.show_gameover_screen()
-
-                    # if self.is_gameover():
-                    #     self.status = Status.GAMEOVER
-                    # else:
-                    #     self.status = Status.PLAY
             else:
                 if not self.sphere_moving.isPlaying():
                     self.sphere_moving = None
-
-        if self.status == Status.RESTART:
+        elif self.status == Status.RESTART:
             if not self.gameover_seq.isPlaying():
                 self.status = Status.PLAY
 
@@ -381,59 +374,55 @@ class Game(ShowBase):
                 yield self.spheres[nx][ny][nz]
 
     def _initialize(self):
-        # if self.score >= int(self.size ** 3 * 2 / 3) and self.size < 6:
-        #     self.size += 1
-        # self.menu.destroy()
-
         self.sphere_moving = None
+        self.size = self.next_size
         self.score = 0
         self.show_score()
         self.setup_spheres()
 
     def show_gameover_screen(self):
-        msg = OnscreenText(
-            parent=self.aspect2d,
+        gui_root = self.aspect2d.attachNewNode('guiRoot')
+
+        OnscreenText(
+            parent=gui_root,
             text='You Won!' if self.score == self.size ** 3 else 'Game Over',
             style=ScreenTitle,
             fg=(1, 1, 1, 1),
-            pos=(0, 0),
+            pos=(0, 0.2),
             align=TextNode.ACenter,
             scale=0.2
         )
-        label = DirectLabel(
-            pos=(-0.3, 0, -0.3),
+        DirectLabel(
+            parent=gui_root,
+            pos=(-0.1, 0, -0.2),
             text='Select Size',
             text_fg=(1, 1, 1, 1),
             frameColor=(1, 1, 1, 0),
             scale=0.08,
         )
-        size_select = DirectOptionMenu(
-            pos=(0, 0, -0.3),
+        DirectOptionMenu(
+            parent=gui_root,
+            pos=(0.2, 0, -0.2),
             scale=0.1,
-            items=['4', '5', '6'],
-            initialitem=0,
+            items=self.options,
+            initialitem=self.options.index(str(self.size)),
             highlightColor=(0.65, 0.65, 0.65, 1),
             command=self.change_size
         )
-        start_btn = DirectButton(
-            pos=(0, 0, -0.6),
+        DirectButton(
+            parent=gui_root,
+            pos=(0, 0, -0.5),
             scale=0.1,
             frameSize=(-2, 2, -0.8, 0.8),
             text='START',
             text_pos=(0, -0.3),
-            command=lambda: self.restart_game(msg, label, size_select, start_btn)
+            command=lambda: self.restart_game(gui_root)
         )
 
-    def restart_game(self, msg, *guis):
-        def delete_gui():
-            for gui in guis:
-                gui.destroy()
-
+    def restart_game(self, gui_root):
         self.gameover_seq = Sequence(
             Wait(0.3),
-            Func(lambda: delete_gui()),
-            msg.scaleInterval(0.5, 0.01),
-            Func(lambda: msg.destroy()),
+            Func(lambda: gui_root.removeNode()),
             Wait(0.5)
         )
         if left_spheres := [s.disappear() for x, y, z in itertools.product(range(self.size), repeat=3)
@@ -444,67 +433,6 @@ class Game(ShowBase):
         self.gameover_seq.start()
         self.status = Status.RESTART
 
-
-
-
-
-
-    # def is_gameover(self):
-    #     if self.can_continue():
-    #         return False
-
-    #     msg = OnscreenText(
-    #         parent=self.aspect2d,
-    #         text='You Won!' if self.score == self.size ** 3 else 'Game Over',
-    #         style=ScreenTitle,
-    #         fg=(1, 1, 1, 1),
-    #         pos=(0, 0),
-    #         align=TextNode.ACenter,
-    #         scale=0.2
-    #     )
-
-        
-    #     self.label = DirectLabel(
-    #         pos=(-0.3, 0, -0.3),
-    #         text='Select Size',
-    #         text_fg=(1, 1, 1, 1),
-    #         frameColor=(1, 1, 1, 0),
-    #         scale=0.08,
-    #     )
-
-    #     self.menu = DirectOptionMenu(
-    #         pos=(0, 0, -0.3),
-    #         scale=0.1,
-    #         items=['4', '5', '6'],
-    #         initialitem=0,
-    #         highlightColor=(0.65, 0.65, 0.65, 1)
-    #     )
-
-    #     self.start_btn = DirectButton(
-    #         pos=(0, 0, -0.6),
-    #         scale=0.1,
-    #         frameSize=(-2, 2, -0.8, 0.8),
-    #         # frameColor=(1, 1, 0.5, 1),
-    #         text='START',
-    #         text_pos=(0, -0.3),
-
-    #     )
-       
-    #     self.gameover_seq = Sequence(
-    #         Wait(1),
-    #         msg.scaleInterval(0.5, 0.01),
-    #         Func(lambda: msg.destroy()),
-    #         Wait(0.5)
-    #     )
-    #     if left_spheres := [s.disappear() for x, y, z in itertools.product(range(self.size), repeat=3)
-    #                         if (s := self.spheres[x][y][z]).color]:
-    #         self.gameover_seq.extend([Parallel(*left_spheres), Wait(0.5)])
-
-    #     self.gameover_seq.append(Func(self._initialize))
-    #     self.gameover_seq.start()
-
-    #     return True
-
     def can_continue(self):
         for x, y, z in itertools.product(range(self.size), repeat=3):
             if self.spheres[x][y][z].color:
@@ -513,7 +441,7 @@ class Game(ShowBase):
         return False
 
     def change_size(self, size):
-        self.size = int(size)
+        self.next_size = int(size)
 
 
 game = Game()
