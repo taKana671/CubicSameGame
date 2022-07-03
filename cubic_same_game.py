@@ -55,7 +55,7 @@ class Colors(Enum):
     MAGENTA = LColor(1, 0, 1, 1)
     PURPLE = LColor(0.501, 0, 0.501, 1)
     LIME = LColor(0, 1, 0, 1)
-    Violet = LColor(0.54, 0.16, 0.88, 1)
+    VIOLET = LColor(0.54, 0.16, 0.88, 1)
     SKY = LColor(0, 0.74, 1, 1)
 
     @classmethod
@@ -142,7 +142,7 @@ class Game(ShowBase):
         self.sphere_moving = None
         self.score = 0
         self.options = ['3', '4', '5', '6']
-        self.size = self.next_size = 3
+        self.size = self.next_size = 4
 
         self.setup_window()
         self.setup_lights()
@@ -260,16 +260,16 @@ class Game(ShowBase):
 
     def delete(self, tag):
         x, y, z = self.get_components(tag)
-        self.sequence = Sequence(self.spheres[x][y][z].shake())
+        self.delete_seq = Sequence(self.spheres[x][y][z].shake())
         self.status = Status.CLICKED
 
         if same_spheres := [s.disappear() for s in self.find_same_colors(x, y, z)]:
             disappear = Parallel(*same_spheres)
             self.show_score(len(disappear))
-            self.sequence.append(disappear)
+            self.delete_seq.append(disappear)
             self.status = Status.DELETE
 
-        self.sequence.start()
+        self.delete_seq.start()
 
     def update(self, task):
         if self.status == Status.PLAY:
@@ -294,10 +294,10 @@ class Game(ShowBase):
                     sphere.rotate_around(rotation_angle, axis)
 
         if self.status == Status.CLICKED:
-            if not self.sequence.isPlaying():
+            if not self.delete_seq.isPlaying():
                 self.status = Status.PLAY
         elif self.status == Status.DELETE:
-            if not self.sequence.isPlaying():
+            if not self.delete_seq.isPlaying():
                 self.status = Status.MOVE
         elif self.status == Status.MOVE:
             if not self.sphere_moving:
