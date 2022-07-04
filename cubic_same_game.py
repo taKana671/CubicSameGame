@@ -9,7 +9,7 @@ from direct.interval.IntervalGlobal import Sequence, Parallel, Func, Wait
 from direct.showbase.InputStateGlobal import inputState
 from direct.showbase.ShowBaseGlobal import globalClock
 from direct.showbase.ShowBase import ShowBase
-from panda3d.core import TextNode
+from panda3d.core import TextNode, PandaNode, NodePath
 from panda3d.core import Quat, Vec3, LColor, BitMask32, Point3
 from panda3d.core import AmbientLight, DirectionalLight
 from panda3d.core import CollisionTraverser, CollisionNode
@@ -63,28 +63,59 @@ class Colors(Enum):
         return random.sample([m.value for m in cls], n)
 
 
-class Sphere:
+class SphereRoot(NodePath):
 
-    def __init__(self, node_path, point, tag, color, pos):
+    def __init__(self):
+        super().__init__(PandaNode('sphereRoot'))
+        self.reparentTo(base.render)
+
+    def create_sphere(self, point, tag, color, pos):
         """color: LColor
            pos: Vec3
         """
+        model = base.loader.loadModel(PATH_SPHERE)
+        model.reparentTo(self)
+        model.setScale(0.2)
+        model.setColor(color)
+        model.setPos(pos)
+
+        model.find('**/Sphere').node().setIntoCollideMask(BitMask32.bit(1))
+        model.find('**/Sphere').node().setTag('sphere', str(tag))
+        # render/sphereRoot/sphere.egg/Sphere
+
+        return Sphere(model, point, tag)
+
+
+class Sphere:
+
+    # def __init__(self, node_path, point, tag, color, pos):
+    #     """color: LColor
+    #        pos: Vec3
+    #     """
+    #     self.tag = tag
+    #     self.color = color
+    #     self.pos = pos
+    #     self.point = point
+    #     self.destination = False
+
+    #     self.model = base.loader.loadModel(PATH_SPHERE)
+    #     self.model.reparentTo(node_path)
+    #     self.model.setScale(0.2)
+
+    #     self.model.setColor(self.color)
+    #     self.model.setPos(self.pos)
+
+    #     self.model.find('**/Sphere').node().setIntoCollideMask(BitMask32.bit(1))
+    #     self.model.find('**/Sphere').node().setTag('sphere', str(self.tag))
+    #     # render/sphereRoot/sphere.egg/Sphere
+
+    def __init__(self, model, point, tag):
+        self.model = model
+        self.color = self.model.getColor()
+        self.pos = self.model.getPos()   # LPoint3
         self.tag = tag
-        self.color = color
-        self.pos = pos
         self.point = point
         self.destination = False
-
-        self.model = base.loader.loadModel(PATH_SPHERE)
-        self.model.reparentTo(node_path)
-        self.model.setScale(0.2)
-
-        self.model.setColor(self.color)
-        self.model.setPos(self.pos)
-
-        self.model.find('**/Sphere').node().setIntoCollideMask(BitMask32.bit(1))
-        self.model.find('**/Sphere').node().setTag('sphere', str(self.tag))
-        # render/sphereRoot/sphere.egg/Sphere
 
     @property
     def distance(self):
@@ -150,7 +181,8 @@ class Game(ShowBase):
         self.setup_controls()
         self.setup_collision_detection()
 
-        self.sphere_root = self.render.attachNewNode('sphereRoot')
+        # self.sphere_root = self.render.attachNewNode('sphereRoot')
+        self.sphere_root = SphereRoot()
         self.setup_spheres()
 
         self.taskMgr.add(self.update, 'update')
@@ -230,9 +262,12 @@ class Game(ShowBase):
         for i, (x, y, z) in enumerate(itertools.product(range(self.size), repeat=3)):
             idx = random.randint(0, upper)
             pos = Vec3(pts[x], pts[y], pts[z])
-            sphere = Sphere(
-                self.sphere_root, point, i, self.colors[idx], pos
-            )
+
+            sphere = self.sphere_root.create_sphere(point, i, self.colors[idx], pos)
+
+            # sphere = Sphere(
+            #     self.sphere_root, point, i, self.colors[idx], pos
+            # )
             self.spheres[x][y][z] = sphere
 
     def click(self):
