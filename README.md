@@ -12,3 +12,8 @@ Cubic Same Game made with Python and Panda3D
 
 # Environment
 * Windows10
+
+# Usage
+* You can select cube size.
+
+![game_over](https://user-images.githubusercontent.com/48859041/177581415-f19aa656-c76c-4683-b0c1-73a9a268dba1.png)
