@@ -88,27 +88,6 @@ class SphereRoot(NodePath):
 
 class Sphere:
 
-    # def __init__(self, node_path, point, tag, color, pos):
-    #     """color: LColor
-    #        pos: Vec3
-    #     """
-    #     self.tag = tag
-    #     self.color = color
-    #     self.pos = pos
-    #     self.point = point
-    #     self.destination = False
-
-    #     self.model = base.loader.loadModel(PATH_SPHERE)
-    #     self.model.reparentTo(node_path)
-    #     self.model.setScale(0.2)
-
-    #     self.model.setColor(self.color)
-    #     self.model.setPos(self.pos)
-
-    #     self.model.find('**/Sphere').node().setIntoCollideMask(BitMask32.bit(1))
-    #     self.model.find('**/Sphere').node().setTag('sphere', str(self.tag))
-    #     # render/sphereRoot/sphere.egg/Sphere
-
     def __init__(self, model, point, tag):
         self.model = model
         self.color = self.model.getColor()
@@ -162,6 +141,28 @@ class Sphere:
         )
 
 
+class ScoreBoard(OnscreenText):
+
+    def __init__(self):
+        super().__init__(
+            parent=base.a2dBottomRight,
+            style=ScreenTitle,
+            fg=(1, 1, 1, 1),
+            pos=(-0.1, 0.09),
+            align=TextNode.ARight,
+            scale=0.07,
+            mayChange=True
+        )
+        self.display_text = 'Score: {}'
+        self.display(0)
+
+    def display(self, n):
+        if n == 0:
+            self.score = 0
+        self.score += n
+        self.setText(self.display_text.format(self.score))
+
+
 class Game(ShowBase):
 
     def __init__(self):
@@ -171,34 +172,22 @@ class Game(ShowBase):
         self.camera.lookAt(0, 0, 0)
         self.status = Status.PLAY
         self.sphere_moving = None
-        self.score = 0
-        self.options = ['3', '4', '5', '6']
-        self.size = self.next_size = 4
+        self.scoreboard = ScoreBoard()
+        self.gui_root = None
+        self.size = 4
 
         self.setup_window()
         self.setup_lights()
-        self.setup_texts()
+        self.setup_instructions()
         self.setup_controls()
         self.setup_collision_detection()
 
-        # self.sphere_root = self.render.attachNewNode('sphereRoot')
         self.sphere_root = SphereRoot()
         self.setup_spheres()
 
         self.taskMgr.add(self.update, 'update')
 
-    def setup_texts(self):
-        self.score_text = 'Score: {}'
-        self.score_dislay = OnscreenText(
-            parent=self.a2dBottomRight,
-            text=self.score_text.format(self.score),
-            style=ScreenTitle,
-            fg=(1, 1, 1, 1),
-            pos=(-0.1, 0.09),
-            align=TextNode.ARight,
-            scale=0.07,
-            mayChange=True
-        )
+    def setup_instructions(self):
         instructions = OnscreenText(
             parent=self.a2dTopLeft,
             style=ScreenTitle,
@@ -260,14 +249,9 @@ class Game(ShowBase):
         upper = self.size - 1
 
         for i, (x, y, z) in enumerate(itertools.product(range(self.size), repeat=3)):
-            idx = random.randint(0, upper)
             pos = Vec3(pts[x], pts[y], pts[z])
-
+            idx = random.randint(0, upper)
             sphere = self.sphere_root.create_sphere(point, i, self.colors[idx], pos)
-
-            # sphere = Sphere(
-            #     self.sphere_root, point, i, self.colors[idx], pos
-            # )
             self.spheres[x][y][z] = sphere
 
     def click(self):
@@ -289,10 +273,6 @@ class Game(ShowBase):
         z = tag % self.size
         return x, y, z
 
-    def show_score(self, cnt=0):
-        self.score += cnt
-        self.score_dislay.setText(self.score_text.format(self.score))
-
     def delete(self, tag):
         x, y, z = self.get_components(tag)
         self.delete_seq = Sequence(self.spheres[x][y][z].shake())
@@ -300,7 +280,7 @@ class Game(ShowBase):
 
         if same_spheres := [s.disappear() for s in self.find_same_colors(x, y, z)]:
             disappear = Parallel(*same_spheres)
-            self.show_score(len(disappear))
+            self.scoreboard.display(len(disappear))
             self.delete_seq.append(disappear)
             self.status = Status.DELETE
 
@@ -408,63 +388,35 @@ class Game(ShowBase):
             if not self.spheres[nx][ny][nz].color:
                 yield self.spheres[nx][ny][nz]
 
-    def _initialize(self):
+    def _initialize(self, size):
         self.sphere_moving = None
-        self.size = self.next_size
-        self.score = 0
-        self.show_score()
+        self.size = size
+        self.scoreboard.display(0)
         self.setup_spheres()
 
     def show_gameover_screen(self):
-        gui_root = self.aspect2d.attachNewNode('guiRoot')
+        if not self.gui_root:
+            self.gui_root = self.aspect2d.attachNewNode('guiRoot')
+            self.gui = GameoverScreen(self.gui_root, self.restart_game)
+        else:
+            self.gui_root.reparentTo(self.aspect2d)
 
-        OnscreenText(
-            parent=gui_root,
-            text='You Won!' if self.score == self.size ** 3 else 'Game Over',
-            style=ScreenTitle,
-            fg=(1, 1, 1, 1),
-            pos=(0, 0.2),
-            align=TextNode.ACenter,
-            scale=0.2
-        )
-        DirectLabel(
-            parent=gui_root,
-            pos=(-0.1, 0, -0.2),
-            text='Select Size',
-            text_fg=(1, 1, 1, 1),
-            frameColor=(1, 1, 1, 0),
-            scale=0.08,
-        )
-        DirectOptionMenu(
-            parent=gui_root,
-            pos=(0.2, 0, -0.2),
-            scale=0.1,
-            items=self.options,
-            initialitem=self.options.index(str(self.size)),
-            highlightColor=(0.65, 0.65, 0.65, 1),
-            command=self.change_size
-        )
-        DirectButton(
-            parent=gui_root,
-            pos=(0, 0, -0.5),
-            scale=0.1,
-            frameSize=(-2, 2, -0.8, 0.8),
-            text='START',
-            text_pos=(0, -0.3),
-            command=lambda: self.restart_game(gui_root)
-        )
+        msg = 'You Won!' if self.scoreboard.score == self.size ** 3 else 'Game Over'
+        self.gui.msg.setText(msg)
+        self.gui.set_size_option(self.size)
 
-    def restart_game(self, gui_root):
+    def restart_game(self):
         self.gameover_seq = Sequence(
             Wait(0.3),
-            Func(lambda: gui_root.removeNode()),
+            Func(lambda: self.gui_root.detachNode()),
             Wait(0.5)
         )
         if left_spheres := [s.disappear() for x, y, z in itertools.product(range(self.size), repeat=3)
                             if (s := self.spheres[x][y][z]).color]:
             self.gameover_seq.extend([Parallel(*left_spheres), Wait(0.5)])
 
-        self.gameover_seq.append(Func(self._initialize))
+        size = self.gui.option_menu.get()
+        self.gameover_seq.append(Func(self._initialize, int(size)))
         self.gameover_seq.start()
         self.status = Status.RESTART
 
@@ -475,8 +427,47 @@ class Game(ShowBase):
                     return True
         return False
 
-    def change_size(self, size):
-        self.next_size = int(size)
+
+class GameoverScreen:
+
+    def __init__(self, root, button_func):
+        self.size_options = ['3', '4', '5', '6']
+
+        self.msg = OnscreenText(
+            parent=root,
+            style=ScreenTitle,
+            fg=(1, 1, 1, 1),
+            pos=(0, 0.2),
+            align=TextNode.ACenter,
+            scale=0.2
+        )
+        DirectLabel(
+            parent=root,
+            pos=(-0.1, 0, -0.2),
+            text='Select Size',
+            text_fg=(1, 1, 1, 1),
+            frameColor=(1, 1, 1, 0),
+            scale=0.08,
+        )
+        self.option_menu = DirectOptionMenu(
+            parent=root,
+            pos=(0.2, 0, -0.2),
+            scale=0.1,
+            items=self.size_options,
+            highlightColor=(0.65, 0.65, 0.65, 1),
+        )
+        self.button = DirectButton(
+            parent=root,
+            pos=(0, 0, -0.5),
+            scale=0.1,
+            frameSize=(-2, 2, -0.8, 0.8),
+            text='START',
+            text_pos=(0, -0.3),
+            command=button_func
+        )
+
+    def set_size_option(self, size):
+        self.option_menu.set(self.size_options.index(str(size)))
 
 
 game = Game()
