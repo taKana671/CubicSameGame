@@ -156,11 +156,12 @@ class ScoreBoard(OnscreenText):
         self.display_text = 'Score: {}'
         self.display(0)
 
-    def display(self, n):
-        if n == 0:
-            self.score = 0
-        self.score += n
-        self.setText(self.display_text.format(self.score))
+    def display(self, score):
+        self.score = score
+        if self.score == 0:
+            self.total = 0
+        self.total += self.score
+        self.setText(self.display_text.format(self.total))
 
 
 class Game(ShowBase):
@@ -401,7 +402,7 @@ class Game(ShowBase):
         else:
             self.gui_root.reparentTo(self.aspect2d)
 
-        msg = 'You Won!' if self.scoreboard.score == self.size ** 3 else 'Game Over'
+        msg = 'You Won!' if self.scoreboard.total == self.size ** 3 else 'Game Over'
         self.gui.msg.setText(msg)
         self.gui.set_size_option(self.size)
 
