@@ -3,6 +3,8 @@ import random
 import sys
 from enum import Enum, auto
 
+import copy
+
 from direct.gui.DirectGui import OnscreenText, ScreenTitle
 from direct.gui.DirectGui import DirectOptionMenu, DirectLabel, DirectButton
 from direct.interval.IntervalGlobal import Sequence, Parallel, Func, Wait
@@ -18,6 +20,8 @@ from panda3d.core import WindowProperties
 
 
 PATH_SPHERE = 'models/alice-shapes--sphere/sphere'
+PATH_SKY = 'models/sky/solar_sky_sphere'
+PATH_SKY_TEXTURE = 'models/sky/stars_1k_tex.jpg'
 
 
 class Arrow(Enum):
@@ -141,6 +145,18 @@ class Sphere:
         )
 
 
+class CosmicSpace(NodePath):
+
+    def __init__(self):
+        super().__init__(PandaNode('sky'))
+        self.reparentTo(base.render)
+        sky = base.loader.loadModel(PATH_SKY)
+        sky.setScale(40)
+        tex = base.loader.loadTexture(PATH_SKY_TEXTURE)
+        sky.setTexture(tex, 1)
+        sky.reparentTo(self)
+
+
 class ScoreBoard(OnscreenText):
 
     def __init__(self):
@@ -168,16 +184,18 @@ class Game(ShowBase):
 
     def __init__(self):
         super().__init__()
+        self.setup_window()
         self.disableMouse()
         self.camera.setPos(20, -20, 15)
+        self.camera.setHpr(0, -90, 0)
         self.camera.lookAt(0, 0, 0)
+
         self.status = Status.PLAY
         self.sphere_moving = None
         self.scoreboard = ScoreBoard()
         self.gui_root = None
         self.size = 4
 
-        self.setup_window()
         self.setup_lights()
         self.setup_instructions()
         self.setup_controls()
@@ -206,7 +224,8 @@ class Game(ShowBase):
         props.setTitle('CubicSameGame')
         props.setSize(800, 600)
         self.win.requestProperties(props)
-        self.setBackgroundColor(0.1, 0.1, 0.1)
+        self.setBackgroundColor(0, 0, 0)
+        CosmicSpace()
 
     def setup_lights(self):
         ambient_light = self.render.attachNewNode(AmbientLight('ambientLight'))
@@ -265,7 +284,7 @@ class Game(ShowBase):
                 self.handler.sortEntries()
                 tag = int(self.handler.getEntry(0).getIntoNode().getTag('sphere'))
                 # print([s.getIntoNode().getTag('sphere') for s in self.handler.getEntries()])
-                print(tag)
+                # print(tag)
                 self.delete(tag)
 
     def get_components(self, tag):
