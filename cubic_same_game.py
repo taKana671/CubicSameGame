@@ -193,7 +193,10 @@ class Game(ShowBase):
         self.status = Status.PLAY
         self.sphere_moving = None
         self.scoreboard = ScoreBoard()
-        self.gui_root = None
+
+        self.gui_root = NodePath(PandaNode('guiRoot'))
+        self.gameover_gui = GameoverScreen(self.gui_root, self.restart_game)
+
         self.size = 4
 
         self.setup_lights()
@@ -415,15 +418,11 @@ class Game(ShowBase):
         self.setup_spheres()
 
     def show_gameover_screen(self):
-        if not self.gui_root:
-            self.gui_root = self.aspect2d.attachNewNode('guiRoot')
-            self.gui = GameoverScreen(self.gui_root, self.restart_game)
-        else:
-            self.gui_root.reparentTo(self.aspect2d)
+        self.gui_root.reparentTo(self.aspect2d)
 
         msg = 'You Won!' if self.scoreboard.total == self.size ** 3 else 'Game Over'
-        self.gui.msg.setText(msg)
-        self.gui.set_size_option(self.size)
+        self.gameover_gui.msg.setText(msg)
+        self.gameover_gui.set_size_option(self.size)
 
     def restart_game(self):
         self.gameover_seq = Sequence(
@@ -435,7 +434,7 @@ class Game(ShowBase):
                             if (s := self.spheres[x][y][z]).color]:
             self.gameover_seq.extend([Parallel(*left_spheres), Wait(0.5)])
 
-        size = self.gui.option_menu.get()
+        size = self.gameover_gui.option_menu.get()
         self.gameover_seq.append(Func(self._initialize, int(size)))
         self.gameover_seq.start()
         self.status = Status.RESTART
