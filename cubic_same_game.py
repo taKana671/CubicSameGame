@@ -18,6 +18,7 @@ from panda3d.core import CollisionTraverser, CollisionNode
 from panda3d.core import CollisionHandlerQueue, CollisionRay
 from panda3d.core import WindowProperties
 
+# from panda3d.core import TransparencyAttrib
 
 PATH_SPHERE = 'models/alice-shapes--sphere/sphere'
 PATH_SKY = 'models/sky/solar_sky_sphere'
@@ -193,10 +194,7 @@ class Game(ShowBase):
         self.status = Status.PLAY
         self.sphere_moving = None
         self.scoreboard = ScoreBoard()
-
-        self.gui_root = NodePath(PandaNode('guiRoot'))
-        self.gameover_gui = GameoverScreen(self.gui_root, self.restart_game)
-
+        self.gameover_gui = GameoverScreen(self.restart_game)
         self.size = 4
 
         self.setup_lights()
@@ -418,7 +416,7 @@ class Game(ShowBase):
         self.setup_spheres()
 
     def show_gameover_screen(self):
-        self.gui_root.reparentTo(self.aspect2d)
+        self.gameover_gui.reparentTo(self.aspect2d)
 
         msg = 'You Won!' if self.scoreboard.total == self.size ** 3 else 'Game Over'
         self.gameover_gui.msg.setText(msg)
@@ -427,7 +425,7 @@ class Game(ShowBase):
     def restart_game(self):
         self.gameover_seq = Sequence(
             Wait(0.3),
-            Func(lambda: self.gui_root.detachNode()),
+            Func(lambda: self.gameover_gui.detachNode()),
             Wait(0.5)
         )
         if left_spheres := [s.disappear() for x, y, z in itertools.product(range(self.size), repeat=3)
@@ -447,13 +445,14 @@ class Game(ShowBase):
         return False
 
 
-class GameoverScreen:
+class GameoverScreen(NodePath):
 
-    def __init__(self, root, button_func):
+    def __init__(self, button_func):
+        super().__init__(PandaNode('guiRoot'))
         self.size_options = ['3', '4', '5', '6']
 
         self.msg = OnscreenText(
-            parent=root,
+            parent=self,
             style=ScreenTitle,
             fg=(1, 1, 1, 1),
             pos=(0, 0.2),
@@ -461,7 +460,7 @@ class GameoverScreen:
             scale=0.2
         )
         DirectLabel(
-            parent=root,
+            parent=self,
             pos=(-0.1, 0, -0.2),
             text='Select Size',
             text_fg=(1, 1, 1, 1),
@@ -469,14 +468,14 @@ class GameoverScreen:
             scale=0.08,
         )
         self.option_menu = DirectOptionMenu(
-            parent=root,
+            parent=self,
             pos=(0.2, 0, -0.2),
             scale=0.1,
             items=self.size_options,
             highlightColor=(0.65, 0.65, 0.65, 1),
         )
         self.button = DirectButton(
-            parent=root,
+            parent=self,
             pos=(0, 0, -0.5),
             scale=0.1,
             frameSize=(-2, 2, -0.8, 0.8),
