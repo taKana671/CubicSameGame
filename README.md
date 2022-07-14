@@ -1,8 +1,7 @@
 # CubicSameGame
 Cubic Same Game made with Python and Panda3D
 
-# Demo
-
+![game](https://user-images.githubusercontent.com/48859041/178991282-5a2c43f3-552a-4f56-aed3-11ca0c08bbab.png)
 
 # Requirements
 * Python 3.9
