@@ -16,4 +16,4 @@ Cubic Same Game made with Python and Panda3D
 # Usage
 * You can select cube size.
 
-![game_over](https://user-images.githubusercontent.com/48859041/177581415-f19aa656-c76c-4683-b0c1-73a9a268dba1.png)
+![gameover](https://user-images.githubusercontent.com/48859041/178983654-d96cde7a-cecf-4e7c-8882-1374c40f5a6a.png)
