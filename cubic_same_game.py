@@ -18,11 +18,10 @@ from panda3d.core import CollisionTraverser, CollisionNode
 from panda3d.core import CollisionHandlerQueue, CollisionRay
 from panda3d.core import WindowProperties
 
-# from panda3d.core import TransparencyAttrib
+from scene import Scene
 
-PATH_SPHERE = 'models/alice-shapes--sphere/sphere'
-PATH_SKY = 'models/sky/solar_sky_sphere'
-PATH_SKY_TEXTURE = 'models/sky/stars_1k_tex.jpg'
+
+PATH_SPHERE = 'models/sphere/sphere'
 
 
 class Arrow(Enum):
@@ -146,18 +145,6 @@ class Sphere:
         )
 
 
-class CosmicSpace(NodePath):
-
-    def __init__(self):
-        super().__init__(PandaNode('sky'))
-        self.reparentTo(base.render)
-        sky = base.loader.loadModel(PATH_SKY)
-        sky.setScale(40)
-        tex = base.loader.loadTexture(PATH_SKY_TEXTURE)
-        sky.setTexture(tex, 1)
-        sky.reparentTo(self)
-
-
 class ScoreBoard(OnscreenText):
 
     def __init__(self):
@@ -226,7 +213,8 @@ class Game(ShowBase):
         props.setSize(800, 600)
         self.win.requestProperties(props)
         self.setBackgroundColor(0, 0, 0)
-        CosmicSpace()
+        self.scene = Scene()
+        # CosmicSpace()
 
     def setup_lights(self):
         ambient_light = self.render.attachNewNode(AmbientLight('ambientLight'))
@@ -308,8 +296,10 @@ class Game(ShowBase):
         self.delete_seq.start()
 
     def update(self, task):
+        dt = globalClock.getDt()
+        self.scene.moon.sattelite.rotate_around(dt)
+
         if self.status == Status.PLAY:
-            dt = globalClock.getDt()
             velocity = 0
             axis = Vec3.forward()
 
