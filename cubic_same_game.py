@@ -157,7 +157,7 @@ class ScoreBoard(OnscreenText):
             scale=0.07,
             mayChange=True
         )
-        self.display_text = 'Score: {}'
+        self.display_text = 'Score: {}  Total: {}'
         self.display(0)
 
     def display(self, score):
@@ -165,7 +165,7 @@ class ScoreBoard(OnscreenText):
         if self.score == 0:
             self.total = 0
         self.total += self.score
-        self.setText(self.display_text.format(self.total))
+        self.setText(self.display_text.format(self.score, self.total))
 
 
 class Game(ShowBase):
@@ -177,7 +177,7 @@ class Game(ShowBase):
         self.camera.setPos(20, -20, 15)
         self.camera.setHpr(0, -90, 0)
         self.camera.lookAt(0, 0, 0)
-
+        self.scene = Scene()
         self.status = Status.PLAY
         self.sphere_moving = None
         self.scoreboard = ScoreBoard()
@@ -213,8 +213,6 @@ class Game(ShowBase):
         props.setSize(800, 600)
         self.win.requestProperties(props)
         self.setBackgroundColor(0, 0, 0)
-        self.scene = Scene()
-        # CosmicSpace()
 
     def setup_lights(self):
         ambient_light = self.render.attachNewNode(AmbientLight('ambientLight'))
@@ -252,7 +250,7 @@ class Game(ShowBase):
         start = self.size // 2 * -2 + 1 if self.size % 2 == 0 else self.size // 2 * -2
         pts = [start + i * 2 for i in range(self.size)]
         # pts = [-3, -1, 1, 3]
-        point = Vec3(0, 0, 0)
+        point = Point3(0, 0, 0)
         self.colors = Colors.select(self.size)
         self.spheres = [[[None for _ in range(self.size)] for _ in range(self.size)] for _ in range(self.size)]
         upper = self.size - 1
@@ -288,6 +286,8 @@ class Game(ShowBase):
         self.status = Status.CLICKED
 
         if same_spheres := [s.disappear() for s in self.find_same_colors(x, y, z)]:
+            if len(same_spheres) >= 4:
+                self.scene.sun.rotate_around()
             disappear = Parallel(*same_spheres)
             self.scoreboard.display(len(disappear))
             self.delete_seq.append(disappear)
