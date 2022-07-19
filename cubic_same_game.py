@@ -13,11 +13,11 @@ from direct.showbase.ShowBaseGlobal import globalClock
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import TextNode, PandaNode, NodePath
 from panda3d.core import Quat, Vec3, LColor, BitMask32, Point3
-from panda3d.core import AmbientLight, DirectionalLight
 from panda3d.core import CollisionTraverser, CollisionNode
 from panda3d.core import CollisionHandlerQueue, CollisionRay
 from panda3d.core import WindowProperties
 
+from lights import BasicDayLight, BasicAmbientLight
 from scene import Scene
 
 
@@ -184,7 +184,9 @@ class Game(ShowBase):
         self.gameover_gui = GameoverScreen(self.restart_game)
         self.size = 4
 
-        self.setup_lights()
+        BasicAmbientLight()
+        BasicDayLight()
+
         self.setup_instructions()
         self.setup_controls()
         self.setup_collision_detection()
@@ -213,20 +215,6 @@ class Game(ShowBase):
         props.setSize(800, 600)
         self.win.requestProperties(props)
         self.setBackgroundColor(0, 0, 0)
-
-    def setup_lights(self):
-        ambient_light = self.render.attachNewNode(AmbientLight('ambientLight'))
-        ambient_light.node().setColor(LColor(0.6, 0.6, 0.6, 1))
-        self.render.setLight(ambient_light)
-
-        directional_light = self.render.attachNewNode(DirectionalLight('directionalLight'))
-        directional_light.node().getLens().setFilmSize(200, 200)
-        directional_light.node().getLens().setNearFar(1, 100)
-        directional_light.node().setColor(LColor(1, 1, 1, 1))
-        directional_light.setPosHpr(Point3(0, 0, 30), Vec3(-30, -45, 0))
-        directional_light.node().setShadowCaster(True)
-        self.render.setShaderAuto()
-        self.render.setLight(directional_light)
 
     def setup_collision_detection(self):
         self.picker = CollisionTraverser()
@@ -478,5 +466,6 @@ class GameoverScreen(NodePath):
         self.option_menu.set(self.size_options.index(str(size)))
 
 
-game = Game()
-game.run()
+if __name__ == '__main__':
+    game = Game()
+    game.run()
