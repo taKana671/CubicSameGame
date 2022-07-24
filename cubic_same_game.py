@@ -3,8 +3,6 @@ import random
 import sys
 from enum import Enum, auto
 
-import copy
-
 from direct.gui.DirectGui import OnscreenText, ScreenTitle
 from direct.gui.DirectGui import DirectOptionMenu, DirectLabel, DirectButton
 from direct.interval.IntervalGlobal import Sequence, Parallel, Func, Wait
@@ -15,10 +13,10 @@ from panda3d.core import TextNode, PandaNode, NodePath
 from panda3d.core import Quat, Vec3, LColor, BitMask32, Point3
 from panda3d.core import CollisionTraverser, CollisionNode
 from panda3d.core import CollisionHandlerQueue, CollisionRay
-from panda3d.core import WindowProperties
 
 from lights import BasicDayLight, BasicAmbientLight
 from scene import Scene
+from window import Window
 
 
 PATH_SPHERE = 'models/sphere/sphere'
@@ -172,7 +170,7 @@ class Game(ShowBase):
 
     def __init__(self):
         super().__init__()
-        self.setup_window()
+        Window('CubicSameGame')
         self.disableMouse()
         self.camera.setPos(20, -20, 15)
         self.camera.setHpr(0, -90, 0)
@@ -208,13 +206,6 @@ class Game(ShowBase):
         instructions.appendText('Esc: Quit\r\n')
         instructions.appendText('Left-click: Select to delete\r\n')
         instructions.appendText('Arrows: Rotate\r\n')
-
-    def setup_window(self):
-        props = WindowProperties()
-        props.setTitle('CubicSameGame')
-        props.setSize(800, 600)
-        self.win.requestProperties(props)
-        self.setBackgroundColor(0, 0, 0)
 
     def setup_collision_detection(self):
         self.picker = CollisionTraverser()
